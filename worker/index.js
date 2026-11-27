@@ -6,7 +6,7 @@
 
 import { Firestore } from "./firestore.js";
 import { verifyIdToken, sha256Hex, readServiceAccount, getAccessToken } from "./google.js";
-import { buildPrompt, buildOwnPrompt, generateWithFallback, signTrial, verifyTrial, b64 } from "./ai.js";
+import { thinkPrompt, buildOwnPrompt, generateWithFallback, signTrial, verifyTrial, b64 } from "./ai.js";
 
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data), {
@@ -278,10 +278,15 @@ async function aiGenerate(request, env) {
     if (prompt.length < 5) throw userError("Write your prompt first (what the picture should show).");
   } else {
     if (subjectName.length < 2) throw userError("Write the subject name first, so the picture matches it.");
-    prompt = buildPrompt(subjectName);
   }
   const db = new Firestore(env);
   await rateLimit(db, user.uid, "ai", 9);
+  let idea = "";
+  if (!own) {
+    const t = await thinkPrompt(env, subjectName, Number(body.variant) || 0);
+    prompt = t.prompt;
+    idea = t.idea;
+  }
   const img = await generateWithFallback(env, db, prompt);
   const image = `data:${img.mime};base64,${b64(img.bytes)}`;
   const h = await sha256Hex(image);
@@ -294,7 +299,7 @@ async function aiGenerate(request, env) {
     m: own ? "prompt" : "auto",
     exp: Date.now() + 2 * 24 * 3600 * 1000,
   });
-  return json({ ok: true, image, token, provider: img.provider, ...(img.skipped?.length ? { note: img.skipped.join(" | ").slice(0, 300) } : {}) });
+  return json({ ok: true, image, token, idea, provider: img.provider, ...(img.skipped?.length ? { note: img.skipped.join(" | ").slice(0, 300) } : {}) });
 }
 
 // Uploads a picture once to Cloudinary and adds it to the shared library (no duplicates).

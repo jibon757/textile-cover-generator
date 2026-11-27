@@ -98,16 +98,56 @@ const SCENES = [
 export const IMG_W = 1280;
 export const IMG_H = 640;
 
-// "Generate with AI": the prompt is made from the subject name.
+// Fixed drawing style added to every "Generate with AI" picture.
+const STYLE =
+  "Cute cartoon clip art, flat vector illustration, bold clean outlines, bright friendly colors, " +
+  "wide landscape composition with everything spread side by side, plain pure white background, nothing behind the people and objects, " +
+  "soft edges fading into white, no border, no frame, no text, no letters, no watermark.";
+
+// Simple backup prompt (used only if the "thinking" text AI is not available).
 export function buildPrompt(subjectName) {
   const s = String(subjectName || "").slice(0, 120);
-  const scene = (SCENES.find(([re]) => re.test(s)) || [null, `the main equipment and materials used in a "${s}" lab class of textile engineering`])[1];
-  return (
-    `Cute cartoon clip art illustration for the cover of a university lab report on "${s}": ${scene}. ` +
-    "Wide landscape composition, objects arranged side by side across the frame, flat vector clipart style, " +
-    "bold clean outlines, bright friendly colors, plain pure white background, nothing behind the objects, " +
-    "soft edges fading into white, no border, no frame, no shadow box, no text, no letters, no watermark."
-  );
+  const scene = (SCENES.find(([re]) => re.test(s)) || [null, `university students in lab coats doing the practical work of a "${s}" lab class in textile engineering`])[1];
+  return `Illustration for the front cover of a university lab report on "${s}": ${scene}. ${STYLE}`;
+}
+
+// "Thinking" step: a text AI first decides what picture suits this subject's lab report,
+// then writes the scene. Each trial asks for a different idea. Falls back to buildPrompt.
+const THINKERS = ["@cf/meta/llama-3.1-8b-instruct-fp8", "@cf/meta/llama-3.2-3b-instruct"];
+const FOCUS = [
+  "students doing the main hands-on experiment of this subject",
+  "a close-up of the key lab equipment and materials of this subject, with one or two students working",
+  "a teacher and students together in the lab, with the result of the experiment clearly visible",
+];
+export async function thinkPrompt(env, subjectName, variant = 0) {
+  const s = String(subjectName || "").slice(0, 120);
+  if (env.AI) {
+    const messages = [
+      {
+        role: "system",
+        content:
+          "You are an art director for Textile Engineering students. You write the scene for ONE illustration that goes on the front cover of a university lab report. " +
+          "First understand the subject (fix spelling mistakes, e.g. 'textike color' means Textile Coloration). Think about what students really do in that lab class " +
+          "(for Textile Coloration: students testing colors, dyeing fabric samples in beakers and dye baths, comparing color swatches). " +
+          "Reply with ONLY the scene description in plain English, 25 to 60 words: who is in it, what they are doing, which equipment and materials are visible. " +
+          "Do not mention art style, colors of the background, text, or the words 'lab report'.",
+      },
+      { role: "user", content: `Subject: "${s}". Scene idea: ${FOCUS[variant % FOCUS.length]}.` },
+    ];
+    for (const model of THINKERS) {
+      try {
+        const out = await env.AI.run(model, { messages, max_tokens: 160, temperature: 0.9 });
+        let scene = typeof out === "string" ? out : out?.response;
+        if (typeof scene !== "string") continue;
+        scene = scene.replace(/^["'\s]*(scene( description)?:)?/i, "").replace(/["'\s]+$/, "").replace(/\s+/g, " ").slice(0, 600);
+        if (scene.length >= 20) return { prompt: `Illustration for the front cover of a university lab report on "${s}": ${scene} ${STYLE}`, idea: scene };
+      } catch (e) {
+        const m = String(e?.message || e);
+        if (/neuron|4006|quota/i.test(m)) break; // daily free limit used: don't waste more calls
+      }
+    }
+  }
+  return { prompt: buildPrompt(s), idea: "" };
 }
 
 // "Own prompt": the student's own words, used as written.

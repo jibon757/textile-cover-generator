@@ -55,8 +55,8 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
     try {
       for (let i = 1; i <= TRIALS_PER_ROUND; i++) {
         setBusy({ n: i, of: TRIALS_PER_ROUND });
-        const r = await api("/api/ai/generate", { method: "POST", body: { mode, prompt: mode === "prompt" ? ownPrompt : "", subjectName: d.subjectName, subjectCode: d.subjectCode } });
-        made.push({ id: r.token.slice(-12), image: r.image, token: r.token });
+        const r = await api("/api/ai/generate", { method: "POST", body: { mode, variant: i - 1, prompt: mode === "prompt" ? ownPrompt : "", subjectName: d.subjectName, subjectCode: d.subjectCode } });
+        made.push({ id: r.token.slice(-12), image: r.image, token: r.token, idea: r.idea || "" });
         setTrials((t) => [...t, made[made.length - 1]]);
       }
       notify("success", "Pictures ready. Tap one to try it on your cover.");
@@ -147,7 +147,7 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
         </div>
         {mode === "auto" ? (
           <p className="hint">
-            Makes {TRIALS_PER_ROUND} landscape clip-art pictures for "{d.subjectName.trim() || "your subject"}" on a white background. Trials are not saved. Up to 9 per day.
+            AI first thinks what suits a "{d.subjectName.trim() || "your subject"}" lab report (e.g. students dyeing and testing colours), then draws {TRIALS_PER_ROUND} different landscape clip-art pictures on a white background. Trials are not saved. Up to 9 per day.
           </p>
         ) : (
           <>
@@ -164,7 +164,7 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
         <button type="button" className="btn-main full" onClick={generate} disabled={!!busy}>
           {busy ? (
             <>
-              <span className="spinner" /> Making picture {busy.n} of {busy.of}…
+              <span className="spinner" /> {mode === "auto" ? "Thinking & drawing" : "Drawing"} picture {busy.n} of {busy.of}…
             </>
           ) : (
             mode === "auto" ? "✨ Generate with AI" : "✍️ Generate from my prompt"
@@ -179,9 +179,13 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
           <>
             <div className="img-grid">
               {trials.map((t) => (
-                <Thumb key={t.id} src={t.image} label="AI trial" on={d.illustration === t.image} onClick={() => pick(t.image, t.token)} />
+                <Thumb key={t.id} src={t.image} label={t.idea ? "AI idea: " + t.idea : "AI trial"} on={d.illustration === t.image} onClick={() => pick(t.image, t.token)} />
               ))}
             </div>
+            {(() => {
+              const sel = trials.find((t) => t.image === d.illustration);
+              return sel?.idea ? <p className="hint">💡 AI idea: {sel.idea}</p> : null;
+            })()}
             <button type="button" className="btn-link danger" onClick={discardTrials}>
               Discard trial pictures
             </button>
