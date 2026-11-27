@@ -298,7 +298,6 @@ function Pictures({ notify, confirm }) {
   async function uploadAll(kind) {
     const box = kind === "subject" ? subj : uni;
     if (!box.files.length) return notify("error", "Choose pictures first.");
-    if (kind === "subject" && subj.name.trim().length < 2 && subj.code.trim().length < 2) return notify("error", "Write the subject name (or code) first.");
     let done = 0;
     const failed = [];
     for (const f of box.files) {
@@ -354,8 +353,21 @@ function Pictures({ notify, confirm }) {
   const srcName = { ai: "AI", "ai-prompt": "AI (own prompt)", upload: "Student upload", owner: "Added by you" };
   return (
     <>
+      <h3 className="adm-h">🎲 Random pictures</h3>
+      <p className="hint">Upload many at once, no subject needed. Students see them in "All pictures". When a student downloads a cover with one, it is linked to that subject automatically.</p>
+      <div className="adm-form">
+        <label className="btn-soft adm-file">
+          📁 Choose pictures {subj.files.length ? `(${subj.files.length} chosen, tap to add more)` : ""}
+          <input type="file" multiple accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => pick(e, setSubj)} />
+        </label>
+        <Chosen box={subj} setter={setSubj} />
+        <button className="btn-main" disabled={!!busy || !subj.files.length} onClick={() => uploadAll("subject")}>
+          {progress("subject") ? <><span className="spinner" /> {progress("subject")}</> : `Upload ${subj.files.length || ""} random`}
+        </button>
+      </div>
+
       <h3 className="adm-h">🌐 Universal pictures</h3>
-      <p className="hint">Upload many pictures at once. They are for every subject; when a student downloads a cover with one, it is linked to that subject automatically.</p>
+      <p className="hint">Always shown to every student in "Common pictures", for all subjects.</p>
       <div className="adm-form">
         <label className="field">
           <span className="field-label">Tags <em>(optional words students may search, e.g. lab beaker fabric)</em></span>

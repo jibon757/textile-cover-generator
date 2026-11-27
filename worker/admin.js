@@ -231,7 +231,6 @@ export async function handleAdmin(request, env, ctx, h) {
     if (!urlOk || !urlOk.startsWith("https://")) throw userError("Upload the picture first (Cloudinary link not accepted).");
     const n = clean(body.subjectName, 150);
     const c = clean(body.subjectCode, 40);
-    if (n.length < 2 && c.length < 2) throw userError("Write the subject name (or code) for these pictures.");
     const id = "o-" + (await sha(urlOk)).slice(0, 38);
     await db.set(
       "approvedImages/" + id,

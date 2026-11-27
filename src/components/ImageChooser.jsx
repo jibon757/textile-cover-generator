@@ -125,7 +125,7 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
       <h4 className="img-h">All pictures <em className="hint">(swipe → and tap the one you like)</em></h4>
       {library && (() => {
         const seen = new Set();
-        const all = [...(library.approved || []), ...(library.common || [])].filter((x) => x.url && !seen.has(x.url) && seen.add(x.url));
+        const all = [...(library.approved || [])].filter((x) => x.url && !seen.has(x.url) && seen.add(x.url));
         return all.length ? (
           <div className="img-swipe">
             {all.map((img) => (
