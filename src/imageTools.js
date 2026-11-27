@@ -4,10 +4,10 @@ import { siteSettings } from "./siteSettings.js";
 
 const OK_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
-export async function readImageFile(file, maxSide = 1600) {
+export async function readImageFile(file, maxSide = 1600, maxMBOverride = 0) {
   if (!file) throw new Error("No file selected.");
   if (!OK_TYPES.includes(file.type)) throw new Error("Please choose a PNG, JPG or WebP image.");
-  const maxMB = siteSettings.uploadMaxMB || 2;
+  const maxMB = maxMBOverride || siteSettings.uploadMaxMB || 2;
   if (file.size > maxMB * 1024 * 1024) throw new Error(`Image is larger than ${maxMB} MB. Please choose a smaller one.`);
 
   const url = URL.createObjectURL(file);

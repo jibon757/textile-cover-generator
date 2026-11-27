@@ -20,6 +20,11 @@ export const DEFAULT_SETTINGS = {
   autoColleges: true,
 };
 
+async function sha(text) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function readSettings(db) {
   const s = await db.get("adminSettings/site").catch(() => null);
   return { ...DEFAULT_SETTINGS, ...(s || {}), id: undefined };
@@ -217,6 +222,22 @@ export async function handleAdmin(request, env, ctx, h) {
     if (!urlOk || !urlOk.startsWith("https://")) throw userError("Upload the picture first (Cloudinary link not accepted).");
     const id = "c-" + crypto.randomUUID().slice(0, 12);
     await db.set("commonImages/" + id, { url: urlOk, title: clean(body.title, 80), tags: clean(body.tags, 200).toLowerCase(), status: "visible", createdAt: new Date() }, false);
+    await bust("images-v1");
+    return json({ ok: true, id });
+  }
+  // Owner adds a picture for one subject (shown first to students who type that subject).
+  if (p === "/approved" && m === "POST") {
+    const urlOk = allowedImageUrl(body.url, env);
+    if (!urlOk || !urlOk.startsWith("https://")) throw userError("Upload the picture first (Cloudinary link not accepted).");
+    const n = clean(body.subjectName, 150);
+    const c = clean(body.subjectCode, 40);
+    if (n.length < 2 && c.length < 2) throw userError("Write the subject name (or code) for these pictures.");
+    const id = "o-" + (await sha(urlOk)).slice(0, 38);
+    await db.set(
+      "approvedImages/" + id,
+      { url: urlOk, subjectName: n, subjectCode: c, subjectKey: h.collegeKey((c + " " + n).trim()), provider: "", source: "owner", status: "visible", createdAt: new Date() },
+      false,
+    );
     await bust("images-v1");
     return json({ ok: true, id });
   }

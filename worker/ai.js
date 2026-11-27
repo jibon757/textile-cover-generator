@@ -99,16 +99,37 @@ export const IMG_W = 1280;
 export const IMG_H = 640;
 
 // Fixed drawing style added to every "Generate with AI" picture.
+// The owner's rule: AI pictures must NEVER contain text. Image models tend to copy words that
+// appear in quotes (like a subject title) onto the picture, so the subject is never quoted in the
+// picture prompt, and every prompt starts and ends with the no-text rule.
+const NO_TEXT_START = "A wordless picture with no writing anywhere.";
+const NO_TEXT_END =
+  "IMPORTANT: the image contains absolutely no text, no letters, no words, no numbers, no title, no labels, " +
+  "no captions, no signs, no logos, no writing on any object, no watermark.";
 const STYLE =
   "Cute cartoon clip art, flat vector illustration, bold clean outlines, bright friendly colors, " +
   "wide landscape composition with everything spread side by side, plain pure white background, nothing behind the people and objects, " +
-  "soft edges fading into white, no border, no frame, no text, no letters, no watermark.";
+  "soft edges fading into white, no border, no frame. " + NO_TEXT_END;
+
+// Objects that usually carry writing are taken out of the scene, so the model has nothing to write on.
+const WRITING_THINGS =
+  /\b(labels?|labell?ed|signs?|signboards?|posters?|charts?|graphs?|diagrams?|whiteboards?|blackboards?|boards?|notebooks?|notes|books?|papers?|reports?|documents?|screens?|monitors?|computers?|laptops?|tablets?|clipboards?|banners?|titles?|titled|named|saying|reads|captions?|text|words?|letters?|names?|numbers?|logos?|written|writing|reading)\b/gi;
+// Drops every part of the scene that mentions something with writing (or anything in quotes).
+export function cleanScene(scene) {
+  const t = String(scene || "").replace(/["“”‘’][^"“”‘’]{0,80}["“”‘’]/g, "").replace(/\s+/g, " ").trim();
+  const parts = t.split(/(?<=[,;.])\s+|\s+(?=and\s)|\s+(?=with\s)/i);
+  const keep = parts.filter((x) => !new RegExp(WRITING_THINGS.source, "i").test(x));
+  let out = keep.join(" ");
+  if (out.replace(/[^a-z]/gi, "").length < 25) out = t.replace(WRITING_THINGS, ""); // too little left: just drop the words
+  return out.replace(/\s+([,.;])/g, "$1").replace(/[,;]\s*$/, "").replace(/\s{2,}/g, " ").trim();
+}
+const wrap = (scene) => `${NO_TEXT_START} ${cleanScene(scene)}. ${STYLE}`;
 
 // Simple backup prompt (used only if the "thinking" text AI is not available).
 export function buildPrompt(subjectName) {
   const s = String(subjectName || "").slice(0, 120);
-  const scene = (SCENES.find(([re]) => re.test(s)) || [null, `university students in lab coats doing the practical work of a "${s}" lab class in textile engineering`])[1];
-  return `Illustration for the front cover of a university lab report on "${s}": ${scene}. ${STYLE}`;
+  const scene = (SCENES.find(([re]) => re.test(s)) || [null, `university students in lab coats doing hands-on practical work in a textile engineering laboratory, with fabric samples, beakers and machines`])[1];
+  return wrap(scene);
 }
 
 // "Thinking" step: a text AI first decides what picture suits this subject's lab report,
@@ -130,7 +151,8 @@ export async function thinkPrompt(env, subjectName, variant = 0) {
           "First understand the subject (fix spelling mistakes, e.g. 'textike color' means Textile Coloration). Think about what students really do in that lab class " +
           "(for Textile Coloration: students testing colors, dyeing fabric samples in beakers and dye baths, comparing color swatches). " +
           "Reply with ONLY the scene description in plain English, 25 to 60 words: who is in it, what they are doing, which equipment and materials are visible. " +
-          "Do not mention art style, colors of the background, text, or the words 'lab report'.",
+          "Never include anything that has writing on it: no signs, labels, posters, charts, boards, books, papers, screens or logos. " +
+          "Do not mention art style, colors of the background, text, titles, or the words 'lab report'.",
       },
       { role: "user", content: `Subject: "${s}". Scene idea: ${FOCUS[variant % FOCUS.length]}.` },
     ];
@@ -140,7 +162,7 @@ export async function thinkPrompt(env, subjectName, variant = 0) {
         let scene = typeof out === "string" ? out : out?.response;
         if (typeof scene !== "string") continue;
         scene = scene.replace(/^["'\s]*(scene( description)?:)?/i, "").replace(/["'\s]+$/, "").replace(/\s+/g, " ").slice(0, 600);
-        if (scene.length >= 20) return { prompt: `Illustration for the front cover of a university lab report on "${s}": ${scene} ${STYLE}`, idea: scene };
+        if (scene.length >= 20) return { prompt: wrap(scene), idea: cleanScene(scene) };
       } catch (e) {
         const m = String(e?.message || e);
         if (/neuron|4006|quota/i.test(m)) break; // daily free limit used: don't waste more calls
@@ -151,8 +173,11 @@ export async function thinkPrompt(env, subjectName, variant = 0) {
 }
 
 // "Own prompt": the student's own words, used as written.
+// The student's words are kept as written; only the owner's no-text rule is added around them.
 export function buildOwnPrompt(text) {
-  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 1000);
+  const t = String(text || "").replace(/\s+/g, " ").trim().slice(0, 1000);
+  if (t.length < 5) return t;
+  return `${NO_TEXT_START} ${t}. ${NO_TEXT_END}`;
 }
 
 // ---------- adapters ----------

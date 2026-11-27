@@ -276,29 +276,65 @@ function Providers({ notify, confirm }) {
 // ---------------- Pictures ----------------
 function Pictures({ notify, confirm }) {
   const { data, error, reload } = useLoad("/api/admin/images");
-  const [file, setFile] = useState(null); // data URL
-  const [title, setTitle] = useState("");
-  const [tags, setTags] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
   const [filter, setFilter] = useState("all");
+  // Two upload boxes: pictures for ONE subject, and universal pictures for every subject.
+  const [subj, setSubj] = useState({ files: [], name: "", code: "" });
+  const [uni, setUni] = useState({ files: [], tags: "" });
 
-  async function addCommon() {
-    if (!file) return notify("error", "Choose a picture first.");
-    setBusy(true);
-    try {
-      const url = await uploadLogo(file, "common-images");
-      await api("/api/admin/common", { method: "POST", body: { url, title, tags } });
-      notify("success", "Common picture added for everyone.");
-      setFile(null);
-      setTitle("");
-      setTags("");
-      reload();
-    } catch (e) {
-      notify("error", e.message);
-    } finally {
-      setBusy(false);
+  async function pick(e, setter) {
+    const list = [...(e.target.files || [])].slice(0, 30);
+    e.target.value = "";
+    const ok = [];
+    for (const f of list) {
+      try {
+        ok.push({ name: f.name.replace(/\.[a-z0-9]+$/i, "").replace(/[_-]+/g, " ").slice(0, 80), url: await readImageFile(f, 1600, 10) });
+      } catch (err) {
+        notify("error", f.name + ": " + err.message);
+      }
     }
+    setter((x) => ({ ...x, files: [...x.files, ...ok].slice(0, 30) }));
   }
+  async function uploadAll(kind) {
+    const box = kind === "subject" ? subj : uni;
+    if (!box.files.length) return notify("error", "Choose pictures first.");
+    if (kind === "subject" && subj.name.trim().length < 2 && subj.code.trim().length < 2) return notify("error", "Write the subject name (or code) first.");
+    let done = 0;
+    const failed = [];
+    for (const f of box.files) {
+      setBusy(`${kind}:${done + 1}/${box.files.length}`);
+      try {
+        const url = await uploadLogo(f.url, kind === "subject" ? "approved-ai" : "common-images");
+        if (kind === "subject") {
+          await api("/api/admin/approved", { method: "POST", body: { url, subjectName: subj.name, subjectCode: subj.code } });
+        } else {
+          await api("/api/admin/common", { method: "POST", body: { url, title: f.name, tags: uni.tags } });
+        }
+        done++;
+      } catch (e) {
+        failed.push(f);
+        notify("error", f.name + ": " + e.message);
+      }
+    }
+    setBusy("");
+    if (done) notify("success", `${done} picture${done > 1 ? "s" : ""} added.` + (failed.length ? ` ${failed.length} failed (still listed, try again).` : ""));
+    if (kind === "subject") setSubj((x) => ({ ...x, files: failed }));
+    else setUni((x) => ({ ...x, files: failed }));
+    reload();
+  }
+  const Chosen = ({ box, setter }) =>
+    box.files.length > 0 && (
+      <div className="adm-chosen">
+        {box.files.map((f, i) => (
+          <figure key={i}>
+            <img src={f.url} alt={f.name} />
+            <button type="button" aria-label="Remove" onClick={() => setter((x) => ({ ...x, files: x.files.filter((_, k) => k !== i) }))}>✕</button>
+          </figure>
+        ))}
+      </div>
+    );
+  const progress = (kind) => (busy.startsWith(kind + ":") ? `Uploading ${busy.split(":")[1]}…` : "");
+
   async function act(kind, item, action) {
     const base = `/api/admin/${kind}/${encodeURIComponent(item.id)}`;
     if (action === "delete" && !(await confirm("Delete this picture from the library? Students will not see it any more."))) return;
@@ -315,44 +351,50 @@ function Pictures({ notify, confirm }) {
   if (!data) return <Loading error={error} retry={reload} />;
   const approved = data.approved.filter((a) => filter === "all" || (filter === "hidden" || filter === "pending" ? a.status === filter : a.source === filter));
   const waiting = data.approved.filter((a) => a.status === "pending").length;
-  const srcName = { ai: "AI", "ai-prompt": "AI (own prompt)", upload: "Student upload" };
+  const srcName = { ai: "AI", "ai-prompt": "AI (own prompt)", upload: "Student upload", owner: "Added by you" };
   return (
     <>
-      <h3 className="adm-h">Add a common picture</h3>
+      <h3 className="adm-h">📚 Subject pictures</h3>
+      <p className="hint">Pictures for one subject. Students who type this subject see them first. You can choose many at once.</p>
       <div className="adm-form">
+        <div className="adm-row2">
+          <label className="field">
+            <span className="field-label">Subject name</span>
+            <input value={subj.name} onChange={(e) => setSubj({ ...subj, name: e.target.value })} placeholder="e.g. Textile Coloration-I" />
+          </label>
+          <label className="field">
+            <span className="field-label">Subject code</span>
+            <input value={subj.code} onChange={(e) => setSubj({ ...subj, code: e.target.value })} placeholder="e.g. WPE-302" />
+          </label>
+        </div>
         <label className="btn-soft adm-file">
-          {file ? "✅ Picture chosen (tap to change)" : "📁 Choose picture"}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            hidden
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (!f) return;
-              try {
-                setFile(await readImageFile(f, 1600));
-              } catch (err) {
-                notify("error", err.message);
-              }
-            }}
-          />
+          📁 Choose pictures {subj.files.length ? `(${subj.files.length} chosen, tap to add more)` : ""}
+          <input type="file" multiple accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => pick(e, setSubj)} />
         </label>
-        {file && <img className="adm-preview" src={file} alt="Chosen" />}
-        <label className="field">
-          <span className="field-label">Title</span>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Dyeing machine" />
-        </label>
-        <label className="field">
-          <span className="field-label">Tags <em>(words students may search, e.g. dyeing color wet process)</em></span>
-          <input value={tags} onChange={(e) => setTags(e.target.value)} />
-        </label>
-        <button className="btn-main" disabled={busy || !file} onClick={addCommon}>
-          {busy && <span className="spinner" />} Upload & add
+        <Chosen box={subj} setter={setSubj} />
+        <button className="btn-main" disabled={!!busy || !subj.files.length} onClick={() => uploadAll("subject")}>
+          {progress("subject") ? <><span className="spinner" /> {progress("subject")}</> : `Upload ${subj.files.length || ""} for this subject`}
         </button>
       </div>
 
-      <h3 className="adm-h">Common pictures ({data.common.length})</h3>
+      <h3 className="adm-h">🌐 Universal pictures</h3>
+      <p className="hint">Pictures for every subject (shown to all students). You can choose many at once.</p>
+      <div className="adm-form">
+        <label className="field">
+          <span className="field-label">Tags <em>(optional words students may search, e.g. lab beaker fabric)</em></span>
+          <input value={uni.tags} onChange={(e) => setUni({ ...uni, tags: e.target.value })} />
+        </label>
+        <label className="btn-soft adm-file">
+          📁 Choose pictures {uni.files.length ? `(${uni.files.length} chosen, tap to add more)` : ""}
+          <input type="file" multiple accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => pick(e, setUni)} />
+        </label>
+        <Chosen box={uni} setter={setUni} />
+        <button className="btn-main" disabled={!!busy || !uni.files.length} onClick={() => uploadAll("universal")}>
+          {progress("universal") ? <><span className="spinner" /> {progress("universal")}</> : `Upload ${uni.files.length || ""} universal`}
+        </button>
+      </div>
+
+      <h3 className="adm-h">Universal pictures ({data.common.length})</h3>
       {data.common.length === 0 ? <p className="hint">None yet. The 4 built-in pictures are always shown.</p> : (
         <div className="adm-grid">
           {data.common.map((c) => (
@@ -368,9 +410,9 @@ function Pictures({ notify, confirm }) {
         </div>
       )}
 
-      <h3 className="adm-h">Library pictures from students ({data.approved.length})</h3>
+      <h3 className="adm-h">Subject pictures ({data.approved.length})</h3>
       <div className="seg small">
-        {[["pending", `⏳ Waiting (${waiting})`], ["all", "All"], ["ai", "AI"], ["ai-prompt", "Own prompt"], ["upload", "Uploads"], ["hidden", "Hidden"]].map(([k, l]) => (
+        {[["pending", `⏳ Waiting (${waiting})`], ["all", "All"], ["owner", "Yours"], ["ai", "AI"], ["ai-prompt", "Own prompt"], ["upload", "Student uploads"], ["hidden", "Hidden"]].map(([k, l]) => (
           <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{l}</button>
         ))}
       </div>

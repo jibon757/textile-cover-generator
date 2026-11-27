@@ -57,11 +57,11 @@ export async function uploadLogo(dataUrl, folder = "college-logos") {
   try {
     res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: "POST", body: form });
   } catch {
-    throw new Error("Logo upload failed: no internet connection.");
+    throw new Error("Upload failed: no internet connection.");
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.secure_url) {
-    throw new Error("Logo upload failed" + (data.error?.message ? ": " + data.error.message : ". Please try again."));
+    throw new Error("Upload failed" + (data.error?.message ? ": " + data.error.message : ". Please try again."));
   }
   return data.secure_url;
 }
