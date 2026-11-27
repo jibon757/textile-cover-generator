@@ -44,13 +44,20 @@ export default function CollegePicker({ value, onPick, notify }) {
     setBusy(true);
     try {
       const logoUrl = newLogo ? await uploadLogo(newLogo) : "";
-      const { college, existed } = await api("/api/colleges", { method: "POST", body: { name, logoUrl } });
+      const { college, existed, pending } = await api("/api/colleges", { method: "POST", body: { name, logoUrl } });
       setColleges((cs) => [...(cs || []).filter((c) => c.id !== college.id), college]);
       onPick(college);
       setAdding(false);
       setNewName("");
       setNewLogo("");
-      notify("success", existed ? "This college already existed, so it was selected." : "College added. Everyone can now pick it.");
+      notify(
+        "success",
+        pending
+          ? "College added for your cover. Others will see it after the site owner approves it."
+          : existed
+            ? "This college already existed, so it was selected."
+            : "College added. Everyone can now pick it.",
+      );
     } catch (err) {
       notify("error", err.message);
     } finally {

@@ -70,6 +70,9 @@ function Overview() {
         <div><b>{c.colleges}</b>Colleges</div>
         <div className={c.collegesToReview ? "warn" : ""}><b>{c.collegesToReview}</b>To review</div>
         <div><b>{c.designs}</b>Saved designs</div>
+        <div className={c.pendingDesigns ? "warn" : ""}><b>{c.pendingDesigns || 0}</b>Designs waiting</div>
+        <div className={c.pendingImages ? "warn" : ""}><b>{c.pendingImages || 0}</b>Pictures waiting</div>
+        <div className={c.pendingColleges ? "warn" : ""}><b>{c.pendingColleges || 0}</b>Colleges waiting</div>
         <div><b>{c.approvedImages}</b>Library pictures</div>
         <div><b>{c.sharedUploads}</b>Student uploads</div>
         <div><b>{c.commonImages}</b>Common pictures</div>
@@ -301,8 +304,8 @@ function Pictures({ notify, confirm }) {
     if (action === "delete" && !(await confirm("Delete this picture from the library? Students will not see it any more."))) return;
     try {
       if (action === "delete") await api(base, { method: "DELETE" });
-      else await api(base, { method: "PATCH", body: { status: action } });
-      notify("success", action === "delete" ? "Deleted." : action === "hidden" ? "Hidden from students." : "Visible again.");
+      else await api(base, { method: "PATCH", body: { status: action === "approve" ? "visible" : action } });
+      notify("success", action === "delete" ? "Deleted." : action === "hidden" ? "Hidden from students." : action === "approve" ? "Approved. Students can use it now." : "Visible again.");
       reload();
     } catch (e) {
       notify("error", e.message);
@@ -310,7 +313,8 @@ function Pictures({ notify, confirm }) {
   }
 
   if (!data) return <Loading error={error} retry={reload} />;
-  const approved = data.approved.filter((a) => filter === "all" || (filter === "hidden" ? a.status === "hidden" : a.source === filter));
+  const approved = data.approved.filter((a) => filter === "all" || (filter === "hidden" || filter === "pending" ? a.status === filter : a.source === filter));
+  const waiting = data.approved.filter((a) => a.status === "pending").length;
   const srcName = { ai: "AI", "ai-prompt": "AI (own prompt)", upload: "Student upload" };
   return (
     <>
@@ -366,20 +370,23 @@ function Pictures({ notify, confirm }) {
 
       <h3 className="adm-h">Library pictures from students ({data.approved.length})</h3>
       <div className="seg small">
-        {[["all", "All"], ["ai", "AI"], ["ai-prompt", "Own prompt"], ["upload", "Uploads"], ["hidden", "Hidden"]].map(([k, l]) => (
+        {[["pending", `⏳ Waiting (${waiting})`], ["all", "All"], ["ai", "AI"], ["ai-prompt", "Own prompt"], ["upload", "Uploads"], ["hidden", "Hidden"]].map(([k, l]) => (
           <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{l}</button>
         ))}
       </div>
       {approved.length === 0 ? <p className="hint">Nothing here.</p> : (
         <div className="adm-grid">
           {approved.map((a) => (
-            <figure key={a.id} className={a.status === "hidden" ? "off" : ""}>
+            <figure key={a.id} className={a.status === "hidden" ? "off" : a.status === "pending" ? "wait" : ""}>
               <img src={a.url} alt={a.subjectName} loading="lazy" />
               <figcaption>
                 {a.subjectName || "(no subject)"}
-                <small>{srcName[a.source] || a.source}{a.status === "hidden" ? " · hidden" : ""}</small>
+                <small>{srcName[a.source] || a.source}{a.status === "hidden" ? " · hidden" : a.status === "pending" ? " · ⏳ waiting" : ""}</small>
               </figcaption>
               <div className="adm-btns">
+                {a.status === "pending" ? (
+                  <button className="btn-main sm" onClick={() => act("approved", a, "approve")}>✓ Approve</button>
+                ) : null}
                 <button className="btn-soft" onClick={() => act("approved", a, a.status === "hidden" ? "visible" : "hidden")}>{a.status === "hidden" ? "Show" : "Hide"}</button>
                 <button className="btn-link danger" onClick={() => act("approved", a, "delete")}>Delete</button>
               </div>
@@ -430,7 +437,9 @@ function Colleges({ notify, confirm }) {
   }
 
   if (!data) return <Loading error={error} retry={reload} />;
-  const list = data.colleges.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
+  const list = data.colleges
+    .filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1));
   const live = data.colleges.filter((c) => c.status === "visible" || !c.status);
   if (edit) {
     return (
@@ -476,7 +485,7 @@ function Colleges({ notify, confirm }) {
       </div>
       <ul className="adm-cards">
         {list.map((c) => (
-          <li key={c.id} className={c.status === "hidden" || c.status === "merged" ? "off" : ""}>
+          <li key={c.id} className={c.status === "hidden" || c.status === "merged" ? "off" : c.status === "pending" ? "wait" : ""}>
             <div className="adm-card-top">
               {c.logoUrl ? <img className="adm-logo" src={c.logoUrl} alt="" /> : <span className="adm-logo none">🏫</span>}
               <b>{c.name}</b>
@@ -485,11 +494,15 @@ function Colleges({ notify, confirm }) {
               {c.source === "community" ? "Added by a student" : c.source === "default" ? "Default" : "Added by owner"}
               {c.source === "community" && !c.reviewed ? " · ⚠️ needs review" : ""}
               {c.status === "hidden" ? " · hidden" : ""}
+              {c.status === "pending" ? " · ⏳ waiting for approval" : ""}
               {c.status === "merged" ? ` · merged into ${data.colleges.find((x) => x.id === c.mergedInto)?.name || c.mergedInto}` : ""}
             </small>
             <div className="adm-btns">
+              {c.status === "pending" && (
+                <button className="btn-main sm" onClick={() => patch(c, { status: "visible" }, "Approved. Students can choose it now.")}>✓ Approve</button>
+              )}
               <button className="btn-soft" onClick={() => setEdit({ id: c.id, name: c.name, logoUrl: c.logoUrl })}>Edit</button>
-              {c.source === "community" && !c.reviewed && c.status !== "hidden" && (
+              {c.source === "community" && !c.reviewed && c.status !== "hidden" && c.status !== "pending" && (
                 <button className="btn-soft" onClick={() => patch(c, {}, "Marked as checked.")}>✓ Looks good</button>
               )}
               {c.source !== "default" &&
@@ -526,8 +539,8 @@ function Designs({ notify, confirm }) {
     try {
       const base = `/api/admin/designs/${encodeURIComponent(d.id)}`;
       if (action === "delete") await api(base, { method: "DELETE" });
-      else await api(base, { method: "PATCH", body: { status: action } });
-      notify("success", "Done.");
+      else await api(base, { method: "PATCH", body: { status: action === "approve" ? "visible" : action } });
+      notify("success", action === "approve" ? "Approved. Students can use this design now." : "Done.");
       reload();
     } catch (e) {
       notify("error", e.message);
@@ -536,16 +549,18 @@ function Designs({ notify, confirm }) {
   if (!data) return <Loading error={error} retry={reload} />;
   if (!data.designs.length) return <p className="adm-empty">No saved designs yet.</p>;
   const tname = (id) => COVER_TEMPLATES.find((t) => t.id === id)?.name || id;
+  const sorted = [...data.designs].sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1));
   return (
     <ul className="adm-cards">
-      {data.designs.map((d) => (
-        <li key={d.id} className={d.status === "hidden" ? "off" : ""}>
+      {sorted.map((d) => (
+        <li key={d.id} className={d.status === "hidden" ? "off" : d.status === "pending" ? "wait" : ""}>
           <div className="adm-card-top">
             {d.illustration ? <img className="adm-logo" src={d.illustration} alt="" /> : <span className="adm-logo none">📄</span>}
             <b>{d.subjectCode ? d.subjectCode + " · " : ""}{d.subjectName}</b>
           </div>
-          <small>{tname(d.coverTemplate)} · {d.collegeName}{d.status === "hidden" ? " · hidden" : ""}</small>
+          <small>{tname(d.coverTemplate)} · {d.collegeName}{d.status === "hidden" ? " · hidden" : d.status === "pending" ? " · ⏳ waiting for approval" : ""}</small>
           <div className="adm-btns">
+            {d.status === "pending" && <button className="btn-main sm" onClick={() => act(d, "approve")}>✓ Approve</button>}
             <button className="btn-soft" onClick={() => act(d, d.status === "hidden" ? "visible" : "hidden")}>{d.status === "hidden" ? "Show" : "Hide"}</button>
             <button className="btn-link danger" onClick={() => act(d, "delete")}>Delete</button>
           </div>
@@ -599,6 +614,13 @@ function Settings({ notify, onSaved }) {
           <input type="number" min="1" max="10" value={s.uploadMaxMB} onChange={(e) => setS({ ...s, uploadMaxMB: e.target.value })} />
         </label>
       </div>
+      <h3 className="adm-h">Auto-approve</h3>
+      <p className="hint">ON: what students add is shown to everyone at once. OFF: it waits until you press ✓ Approve (Designs, Pictures and Colleges tabs).</p>
+      {[["autoDesigns", "Saved designs"], ["autoImages", "Pictures (AI and student uploads)"], ["autoColleges", "New colleges"]].map(([k, l]) => (
+        <label key={k} className="adm-check">
+          <input type="checkbox" checked={s[k] !== false} onChange={(e) => setS({ ...s, [k]: e.target.checked })} /> Auto-approve {l.toLowerCase()}
+        </label>
+      ))}
       <h3 className="adm-h">Templates students can use</h3>
       {[["hiddenCover", "Cover", COVER_TEMPLATES], ["hiddenIndex", "Index", INDEX_TEMPLATES]].map(([key, label, list]) => (
         <div key={key} className="adm-tpls">

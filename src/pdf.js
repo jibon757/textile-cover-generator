@@ -3,7 +3,7 @@
 // Text stays real text (selectable, sharp) — this is NOT a screenshot.
 
 const FONT_LINK =
-  "https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Merriweather:wght@700;900&display=swap";
+  "https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Merriweather:wght@700;900&family=Bebas+Neue&family=Archivo+Black&family=Playfair+Display:ital,wght@0,800;0,900;1,800&display=swap";
 
 function collectCss() {
   let css = "";

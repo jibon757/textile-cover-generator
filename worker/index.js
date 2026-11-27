@@ -117,7 +117,7 @@ async function listColleges(env, ctx) {
       all = [{ id: DEFAULT_COLLEGE.id, name: DEFAULT_COLLEGE.name, logoUrl: DEFAULT_COLLEGE.logoUrl, source: "default", status: "visible" }, ...all];
     }
     return all
-      .filter((c) => c.status !== "hidden" && c.status !== "merged")
+      .filter((c) => (c.status || "visible") === "visible")
       .map((c) => ({ id: c.id, name: c.name, logoUrl: c.logoUrl || "", community: c.source === "community" }))
       .sort((a, b) => (a.id === DEFAULT_COLLEGE.id ? -1 : b.id === DEFAULT_COLLEGE.id ? 1 : a.name.localeCompare(b.name)));
   });
@@ -137,20 +137,22 @@ async function addCollege(request, env) {
   const db = new Firestore(env);
   const existing = await db.get("colleges/" + id);
   if (existing && existing.status !== "hidden") {
-    return json({ ok: true, existed: true, college: { id, name: existing.name, logoUrl: existing.logoUrl || "", community: existing.source === "community" } });
+    return json({ ok: true, existed: true, pending: existing.status === "pending", college: { id, name: existing.name, logoUrl: existing.logoUrl || "", community: existing.source === "community" } });
   }
   await rateLimit(db, user.uid, "college", 5);
+  const settings = await readSettings(db);
+  const status = settings.autoColleges === false ? "pending" : "visible";
   const created = await db.createIfMissing("colleges", id, {
     name,
     logoUrl,
     source: "community",
-    status: "visible",
+    status,
     reviewed: false,
     createdBy: user.uid,
     createdAt: new Date(),
   });
   await bust("colleges-v1");
-  return json({ ok: true, existed: !created, college: { id, name, logoUrl, community: true } });
+  return json({ ok: true, existed: !created, pending: status === "pending", college: { id, name, logoUrl, community: true } });
 }
 
 // ---------- saved designs (NO personal data) ----------
@@ -179,7 +181,7 @@ async function listDesigns(env, ctx) {
   const db = new Firestore(env);
   const items = await cached("designs-v1", 60, ctx, async () => {
     const rows = await db.query("savedDesigns", { orderBy: [["createdAt", "DESCENDING"]], limit: 300 });
-    return rows.filter((r) => r.status !== "hidden").map(({ createdBy, status, subjectKey, ...rest }) => rest);
+    return rows.filter((r) => (r.status || "visible") === "visible").map(({ createdBy, status, subjectKey, ...rest }) => rest);
   });
   return json({ ok: true, designs: items });
 }
@@ -196,15 +198,17 @@ async function saveDesign(request, env) {
   const id = (await sha256Hex("design-v2|" + subjectId + "|" + design.illustration)).slice(0, 40);
   const db = new Firestore(env);
   const existing = await db.get("savedDesigns/" + id);
-  if (existing) return json({ ok: true, existed: true, id });
+  if (existing) return json({ ok: true, existed: true, pending: existing.status === "pending", id });
 
   await rateLimit(db, user.uid, "design", 30);
-  const created = await db.createIfMissing("savedDesigns", id, { ...design, subjectKey: subjectId, createdBy: user.uid, createdAt: new Date(), status: "visible" });
+  const settings = await readSettings(db);
+  const status = settings.autoDesigns === false ? "pending" : "visible";
+  const created = await db.createIfMissing("savedDesigns", id, { ...design, subjectKey: subjectId, createdBy: user.uid, createdAt: new Date(), status });
   if (created) {
     await db.increment("subjects/" + subjectId, { name: design.subjectName, code: design.subjectCode, department: design.department }, { designs: 1 });
   }
   await bust("designs-v1");
-  return json({ ok: true, existed: !created, id });
+  return json({ ok: true, existed: !created, pending: status === "pending", id });
 }
 
 // ---------- download stats / template ranking ----------
@@ -263,7 +267,7 @@ async function listImages(env, ctx) {
     const common = await db.list("commonImages", 300).catch(() => []);
     return {
       approved: approved
-        .filter((r) => r.status !== "hidden")
+        .filter((r) => (r.status || "visible") === "visible")
         .map((r) => ({ id: r.id, url: r.url, subjectName: r.subjectName || "", subjectCode: r.subjectCode || "", subjectKey: r.subjectKey || "" })),
       common: [
         ...common.filter((r) => r.status !== "hidden" && r.url).map((r) => ({ id: r.id, url: r.url, title: r.title || "", tags: r.tags || "" })),
@@ -327,6 +331,8 @@ async function saveToLibrary(env, user, image, info) {
   if (existing?.url) return { existed: true, url: existing.url, id };
 
   await rateLimit(db, user.uid, "approve", 20);
+  const settings = await readSettings(db);
+  const status = settings.autoImages === false ? "pending" : "visible";
   const form = new FormData();
   form.append("file", image);
   form.append("upload_preset", env.CLOUDINARY_UPLOAD_PRESET || "coverpc");
@@ -343,13 +349,13 @@ async function saveToLibrary(env, user, image, info) {
     subjectKey: info.k || "",
     provider: info.p || "",
     source: info.source,
-    status: "visible",
+    status,
     createdBy: user.uid,
     createdAt: new Date(),
   });
   await bust("images-v1");
   const saved = await db.get("approvedImages/" + id);
-  return { existed: false, url: saved?.url || url, id };
+  return { existed: false, pending: status === "pending", url: saved?.url || url, id };
 }
 
 function readDataImage(body, maxLen) {

@@ -326,7 +326,9 @@ export default function App() {
   const hiddenIds = (tab === "cover" ? settings.hiddenCover : settings.hiddenIndex) || [];
   const allOfKind = tab === "cover" ? COVER_TEMPLATES : INDEX_TEMPLATES;
   const visibleOfKind = allOfKind.filter((t) => !hiddenIds.includes(t.id));
-  const templates = [...(visibleOfKind.length ? visibleOfKind : allOfKind)].sort((a, b) => (kindStats[b.id] || 0) - (kindStats[a.id] || 0));
+  const templates = [...(visibleOfKind.length ? visibleOfKind : allOfKind)].sort(
+    (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (kindStats[b.id] || 0) - (kindStats[a.id] || 0),
+  );
   const activeTpl = tab === "cover" ? coverTpl : indexTpl;
   const setTpl = tab === "cover" ? setCoverTpl : setIndexTpl;
   const page = tab === "cover" ? <CoverT d={cover} /> : <IndexT cover={cover} index={index} />;

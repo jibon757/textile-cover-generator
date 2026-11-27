@@ -2,6 +2,7 @@
 // Positions use millimetres so the printed page matches the preview exactly.
 import Fit from "../components/Fit.jsx";
 import Illustration from "../components/Illustration.jsx";
+import { MORE_COVERS } from "./themes.jsx";
 import { InfoList, TeacherLines, studentRows, teacherRows, SubjectLine, DateLine, Logo, key } from "./parts.jsx";
 
 const abs = (top, left, right, height, extra = {}) => ({ position: "absolute", top, left, right, height, ...extra });
@@ -187,4 +188,5 @@ export const COVER_TEMPLATES = [
   { id: "classic-green", name: "Classic Green", Component: ClassicGreen },
   { id: "royal-banner", name: "Royal Banner", Component: RoyalBanner },
   { id: "maroon-side", name: "Maroon Side Band", Component: MaroonSide },
+  ...MORE_COVERS,
 ];

@@ -333,3 +333,50 @@ input[type="range"] { padding: 0; accent-color: var(--green); }
 .seg.small button { font-size: 13px; padding: 7px 10px; }
 @media (max-width: 420px) { .adm-row2 { grid-template-columns: 1fr; } }
 .seg.small { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); }
+/* Auto-approve: items waiting for the owner */
+.adm-cards li.wait, .adm-grid figure.wait { background: #fff8e6; outline: 2px solid #f0b429; }
+.btn-main.sm { padding: 6px 12px; border-radius: 9px; font-size: 13px; }
+
+/* ============ Templates 4–13 (themes.jsx) ============ */
+.a4 .pill { font-size: 11pt; padding: 1.2mm 4mm; border-radius: 10mm; margin-bottom: 3mm; color: #fff; font-weight: 700; }
+.a4 .f-bebas { font-family: "Bebas Neue", "Inter", sans-serif; font-weight: 400; }
+.a4 .f-heavy { font-family: "Archivo Black", "Inter", sans-serif; font-weight: 400; }
+.a4 .f-play { font-family: "Playfair Display", Georgia, serif; font-weight: 800; }
+
+/* Submitted By / To titles */
+.bx-title { display: inline-block; font-weight: 800; font-size: 10.5pt; margin-bottom: 2.5mm; text-transform: uppercase; letter-spacing: .06em; }
+.bx-pill { background: var(--c); color: #fff; padding: 1.1mm 4mm; border-radius: 10mm; text-transform: none; letter-spacing: 0; font-size: 11pt; }
+.bx-chip { color: var(--c); border-left: 1.6mm solid var(--c); padding: 0.4mm 0 0.4mm 2.4mm; }
+.bx-tab { background: var(--c); color: #fff; padding: 1.1mm 7mm 1.1mm 4mm; clip-path: polygon(0 0, 90% 0, 100% 100%, 0 100%); }
+.bx-under { display: block; color: var(--c); border-bottom: 0.5mm solid var(--c); padding-bottom: 1.2mm; }
+.bx-mono { color: #fff; background: var(--c); padding: 1mm 3.5mm; font-family: "Bebas Neue", sans-serif; font-weight: 400; font-size: 14pt; letter-spacing: .1em; }
+.bx-stitch { color: var(--c); border: 0.4mm dashed var(--c); padding: 0.8mm 3mm; border-radius: 1.5mm; }
+
+/* art */
+.ink-bg { position: absolute; inset: 0; background:
+  radial-gradient(60mm 60mm at 12% 8%, #f97316 0%, transparent 70%),
+  radial-gradient(80mm 70mm at 90% 14%, #db2777 0%, transparent 70%),
+  radial-gradient(90mm 90mm at 85% 95%, #7c3aed 0%, transparent 70%),
+  radial-gradient(70mm 70mm at 5% 80%, #0ea5e9 0%, transparent 70%),
+  linear-gradient(160deg, #1e1b4b, #4c1d95 55%, #831843); }
+.ink-card { position: absolute; left: 12mm; right: 12mm; bottom: 12mm; background: #fff; border-radius: 6mm; box-shadow: 0 2mm 6mm rgba(0,0,0,.25); }
+.tartan { position: absolute; left: 0; right: 0; background-color: #991b1b; background-image:
+  repeating-linear-gradient(90deg, transparent 0 10mm, rgba(20,83,45,.75) 10mm 16mm, transparent 16mm 18mm, rgba(250,204,21,.8) 18mm 18.6mm, transparent 18.6mm 26mm),
+  repeating-linear-gradient(0deg, transparent 0 10mm, rgba(20,83,45,.75) 10mm 16mm, transparent 16mm 18mm, rgba(250,204,21,.8) 18mm 18.6mm, transparent 18.6mm 26mm),
+  repeating-linear-gradient(45deg, rgba(0,0,0,.08) 0 0.4mm, transparent 0.4mm 1.2mm); }
+.tartan.thin { left: auto; right: auto; border-radius: 1mm; }
+.plate { position: absolute; background: #fffdf7; border-radius: 3mm; box-shadow: 0 1.2mm 3mm rgba(0,0,0,.35); border: 0.5mm solid #facc15; }
+.knit-label { background: #9a3412; color: #fff7ed; font-family: "Playfair Display", serif; font-weight: 800; letter-spacing: .08em; padding: 0 9mm; display: flex; align-items: center; white-space: nowrap; border-radius: 8mm; outline: 0.45mm dashed #fdba74; outline-offset: -1.6mm; }
+.yarn-label { color: #0f766e; font-family: "Archivo Black", sans-serif; text-transform: uppercase; letter-spacing: .1em; padding: 0 9mm; display: flex; align-items: center; white-space: nowrap; border: 0.6mm solid #f97362; border-radius: 10mm; }
+.hang-tag { background: #e2c79a; clip-path: polygon(12mm 0, 100% 0, 100% 100%, 12mm 100%, 0 50%); transform: rotate(-3deg); box-shadow: inset 0 0 0 0.5mm #b08d57; }
+.hang-tag::before { content: ""; position: absolute; left: 6mm; top: calc(50% - 2mm); width: 4mm; height: 4mm; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 0.4mm #8a6a3a; }
+
+/* index words + themed table */
+.iw { font-weight: 800; font-size: 22pt; letter-spacing: 0.28em; padding: 1.4mm 8mm 1.4mm 11mm; font-family: Arial, "Inter", sans-serif; }
+.iw-bw { color: #000; border: 0.5mm solid #000; }
+.index-table.themed th { background: var(--th); color: #fff; border: 0.3mm solid var(--th); }
+.index-table.themed td { border-bottom: 0.3mm solid var(--line); height: 14mm; background: #fff; }
+.index-table.themed tbody tr:nth-child(even) td { background: var(--zebra); }
+.index-table.bw th { background: #fff; color: #000; border: 0.35mm solid #000; }
+.index-table.bw td { border: 0.35mm solid #000; background: #fff !important; }
+.index-table td.c:last-child { white-space: nowrap; }

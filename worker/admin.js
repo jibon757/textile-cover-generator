@@ -13,6 +13,11 @@ export const DEFAULT_SETTINGS = {
   uploadMaxMB: 3, // biggest picture/logo a student may choose (before compression)
   hiddenCover: [], // cover template ids hidden from students
   hiddenIndex: [], // index template ids hidden from students
+  // Auto-approve: ON = what students add is public at once. OFF = it waits ("pending")
+  // until the owner presses Approve in the Admin panel.
+  autoDesigns: true,
+  autoImages: true,
+  autoColleges: true,
 };
 
 export async function readSettings(db) {
@@ -78,6 +83,9 @@ export async function handleAdmin(request, env, ctx, h) {
         colleges: colleges.length,
         collegesToReview: colleges.filter((c) => c.source === "community" && !c.reviewed && c.status !== "hidden" && c.status !== "merged").length,
         designs: designs.length,
+        pendingDesigns: designs.filter((x) => x.status === "pending").length,
+        pendingImages: approved.filter((x) => x.status === "pending").length,
+        pendingColleges: colleges.filter((x) => x.status === "pending").length,
         approvedImages: approved.length,
         sharedUploads: approved.filter((a) => a.source === "upload").length,
         commonImages: common.length,
@@ -100,6 +108,9 @@ export async function handleAdmin(request, env, ctx, h) {
       uploadMaxMB: Math.max(1, Math.min(10, Math.round(Number(s.uploadMaxMB) || 3))),
       hiddenCover: ids(s.hiddenCover),
       hiddenIndex: ids(s.hiddenIndex),
+      autoDesigns: s.autoDesigns !== false,
+      autoImages: s.autoImages !== false,
+      autoColleges: s.autoColleges !== false,
       updatedAt: new Date(),
     };
     await db.set("adminSettings/site", next, false);
@@ -213,7 +224,7 @@ export async function handleAdmin(request, env, ctx, h) {
     if (p.startsWith(route)) {
       const id = idFrom(route);
       if (m === "PATCH") {
-        const patch = { status: body.status === "hidden" ? "hidden" : "visible" };
+        const patch = { status: body.status === "hidden" ? "hidden" : "visible", reviewedAt: new Date() };
         if (coll === "commonImages") {
           if (typeof body.title === "string") patch.title = clean(body.title, 80);
           if (typeof body.tags === "string") patch.tags = clean(body.tags, 200).toLowerCase();
@@ -287,7 +298,7 @@ export async function handleAdmin(request, env, ctx, h) {
   }
   if (p.startsWith("/designs/")) {
     const id = idFrom("/designs/");
-    if (m === "PATCH") await db.set("savedDesigns/" + id, { status: body.status === "hidden" ? "hidden" : "visible" }, true);
+    if (m === "PATCH") await db.set("savedDesigns/" + id, { status: body.status === "hidden" ? "hidden" : "visible", reviewedAt: new Date() }, true);
     else if (m === "DELETE") await db.remove("savedDesigns/" + id);
     else return json({ ok: false, error: "Method not allowed." }, 405);
     await bust("designs-v1");

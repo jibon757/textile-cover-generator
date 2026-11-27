@@ -1,6 +1,7 @@
 // Index page templates (A4). Only completed rows are printed, numbered 01, 02, ...
 import Fit from "../components/Fit.jsx";
 import { Logo, key } from "./parts.jsx";
+import { MORE_INDEXES, PlainBWIndex, MaroonIndex } from "./themes.jsx";
 import { completedRows, formatDate } from "../data.js";
 
 const abs = (top, left, right, height, extra = {}) => ({ position: "absolute", top, left, right, height, ...extra });
@@ -102,7 +103,11 @@ function BannerIndex({ cover, index }) {
   );
 }
 
+// The plain black & white index is always first (owner's rule) and is the default.
 export const INDEX_TEMPLATES = [
+  { id: "plain-bw", name: "Plain Black & White", Component: PlainBWIndex, pinned: true },
   { id: "classic-green", name: "Classic Green", Component: ClassicIndex },
   { id: "royal-banner", name: "Royal Banner", Component: BannerIndex },
+  { id: "maroon-side", name: "Maroon Side Band", Component: MaroonIndex },
+  ...MORE_INDEXES,
 ];
