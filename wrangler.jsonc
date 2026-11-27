@@ -1,0 +1,17 @@
+{
+  // Cloudflare Worker settings. One Worker serves the website AND the /api backend.
+  "name": "textile-cover-generator",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    "APP_VERSION": "0.2.0",
+    "FIREBASE_PROJECT_ID": "textile-cover-generator",
+    "CLOUDINARY_CLOUD_NAME": "hh9hmbra"
+  }
+}

@@ -1,0 +1,29 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", "Noto Sans Bengali", sans-serif;
+  background: linear-gradient(160deg, #eef6f0 0%, #f6f8fc 60%);
+  color: #1d2a22;
+  min-height: 100vh;
+}
+.page { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+.hero { display: flex; gap: 16px; align-items: center; margin-bottom: 24px; }
+.logo { width: 72px; height: 72px; object-fit: contain; border-radius: 12px; background: #fff; padding: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+h1 { font-size: 1.5rem; margin: 0; color: #274E13; }
+.sub { margin: 4px 0 0; color: #0070C0; font-weight: 600; }
+.card { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 4px 24px rgba(0,0,0,.06); border-top: 4px solid #00B050; }
+h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.checks { list-style: none; padding: 0; margin: 0 0 16px; }
+.check { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef1ee; }
+.check:last-child { border-bottom: 0; }
+.icon { font-size: 1.2rem; }
+.detail { font-size: .85rem; color: #5b6b60; margin-top: 2px; word-break: break-word; }
+.check.fail .detail { color: #b3261e; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+button, .btn-outline {
+  font: inherit; padding: 10px 16px; border-radius: 10px; cursor: pointer; text-decoration: none;
+}
+button { background: #274E13; color: #fff; border: 0; }
+button:hover { background: #1c3a0d; }
+.btn-outline { border: 1.5px solid #274E13; color: #274E13; background: #fff; }
+.note { text-align: center; color: #6b7a70; font-size: .9rem; margin-top: 20px; }
