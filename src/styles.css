@@ -185,13 +185,41 @@ input[type="range"] { padding: 0; accent-color: var(--green); }
 .index-table .empty-note td { color: #999; font-style: italic; text-align: center; border-style: dashed; }
 
 /* ============ Printing ============ */
-.print-root { position: fixed; left: -10000px; top: 0; pointer-events: none; } /* off-screen but measurable */
+.export-root { position: fixed; left: -10000px; top: 0; pointer-events: none; } /* off-screen but measurable */
 @page { size: A4; margin: 0; }
 @media print {
   body { background: #fff; }
-  .app > :not(.print-root) { display: none !important; }
-  .print-root { position: static; left: auto; }
-  .print-root .a4 { page-break-after: always; break-after: page; }
-  .print-root .a4:last-child { page-break-after: auto; break-after: auto; }
+  .app > :not(.export-root) { display: none !important; }
+  .export-root { position: static; left: auto; }
+  .export-root .a4 { page-break-after: always; break-after: page; }
+  .export-root .a4:last-child { page-break-after: auto; break-after: auto; }
   .empty-note { display: none; }
+}
+
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+.spinner.dark { border-color: rgba(39,78,19,.3); border-top-color: var(--green); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.credit { margin: 10px 0 0; font-size: 13px; color: #6b7280; }
+.credit a { color: var(--green); font-weight: 700; text-decoration: none; padding: 6px 0; display: inline-block; }
+.credit a:hover, .credit a:focus-visible { text-decoration: underline; }
+
+/* ============ Phone-first polish ============ */
+.mobile-dl { display: none; }
+@media (max-width: 900px) {
+  input, select, textarea { font-size: 16px; min-height: 44px; } /* stops iPhone zooming in */
+  input[type="range"] { min-height: 32px; }
+  .btn-main, .btn-outline { min-height: 46px; }
+  .btn-link { padding: 10px 0; font-size: 14px; }
+  .actions-bar, .right > .hint.center { display: none; }
+  .mobile-dl {
+    display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96);
+    box-shadow: 0 -4px 16px rgba(0,0,0,.08); backdrop-filter: blur(6px);
+  }
+  .mobile-dl button { flex: 1; justify-content: center; }
+  .app { padding-bottom: 84px; }
+  .toast { bottom: 90px; }
+  .tpl-strip { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
+  .tpl-card { flex: 0 0 auto; scroll-snap-align: start; }
 }

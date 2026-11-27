@@ -6,6 +6,7 @@ import { INDEX_TEMPLATES } from "./templates/indexes.jsx";
 import { CoverEditor, IndexEditor } from "./components/Editors.jsx";
 import ScaledPage from "./components/ScaledPage.jsx";
 import { auth, signInAnonymously } from "./firebase.js";
+import { downloadPdf, pdfFileName } from "./pdf.js";
 
 const DRAFT_KEY = "tcg.draft.v1";
 
@@ -36,7 +37,8 @@ export default function App() {
   const [mobileView, setMobileView] = useState("edit"); // "edit" | "preview" (phones only)
   const [toast, setToast] = useState(null);
   const [dialog, setDialog] = useState(null);
-  const [printWhat, setPrintWhat] = useState(null); // null | "cover" | "index" | "both"
+  const [exportWhat, setExportWhat] = useState(null); // null | "cover" | "index" | "both"
+  const exportRef = useRef(null);
   const [saveState, setSaveState] = useState("saved");
 
   const notify = useCallback((type, text) => {
@@ -70,15 +72,29 @@ export default function App() {
     return () => clearTimeout(t);
   }, [cover, index, coverTpl, indexTpl, notify]);
 
-  // Print: render the chosen pages, then open the print dialog.
+  // Download: render the chosen pages full-size (off-screen), let text sizes settle,
+  // then send them to the server which returns a real A4 PDF.
   useEffect(() => {
-    if (!printWhat) return;
-    const t = setTimeout(() => {
-      window.print();
-      setPrintWhat(null);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [printWhat]);
+    if (!exportWhat) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await document.fonts?.ready;
+        await new Promise((r) => setTimeout(r, 250));
+        if (cancelled) return;
+        await downloadPdf(exportRef.current, pdfFileName(cover, exportWhat));
+        notify("success", "PDF downloaded.");
+      } catch (err) {
+        notify("error", err.message);
+      } finally {
+        if (!cancelled) setExportWhat(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportWhat]);
 
   const CoverT = (COVER_TEMPLATES.find((t) => t.id === coverTpl) || COVER_TEMPLATES[0]).Component;
   const IndexT = (INDEX_TEMPLATES.find((t) => t.id === indexTpl) || INDEX_TEMPLATES[0]).Component;
@@ -134,6 +150,12 @@ export default function App() {
             <button type="button" className="btn-link danger" onClick={clearMine}>
               Clear my personal details
             </button>
+            <p className="credit">
+              Developed by{" "}
+              <a href="https://www.facebook.com/jibon.mistry.24400" target="_blank" rel="noopener noreferrer">
+                Jibon Mistry
+              </a>
+            </p>
           </div>
         </div>
 
@@ -155,21 +177,31 @@ export default function App() {
           </div>
 
           <div className="actions-bar">
-            <button className="btn-main" onClick={() => setPrintWhat(tab)}>
-              🖨️ Print / Save {tab === "cover" ? "Cover" : "Index"}
+            <button className="btn-main" disabled={!!exportWhat} onClick={() => setExportWhat(tab)}>
+              {exportWhat === tab ? <span className="spinner" /> : "⬇️"} Download {tab === "cover" ? "Cover" : "Index"} PDF
             </button>
-            <button className="btn-outline" onClick={() => setPrintWhat("both")}>
-              Print both
+            <button className="btn-outline" disabled={!!exportWhat} onClick={() => setExportWhat("both")}>
+              {exportWhat === "both" ? <span className="spinner dark" /> : null} Cover + Index (one PDF)
             </button>
           </div>
-          <p className="hint center">Temporary: uses your browser's print → "Save as PDF" (A4, Margins: None, Background graphics on). One-click PDF arrives in Phase 6.</p>
+          <p className="hint center">{exportWhat ? "Making your A4 PDF… (a few seconds)" : "Real A4 PDF, ready to print."}</p>
         </div>
       </main>
 
-      {/* Full-size pages used only for printing */}
-      <div className="print-root" aria-hidden="true">
-        {(printWhat === "cover" || printWhat === "both") && <CoverT d={cover} />}
-        {(printWhat === "index" || printWhat === "both") && <IndexT cover={cover} index={index} />}
+      {/* Phones: download buttons always reachable at the bottom of the screen */}
+      <div className="mobile-dl">
+        <button className="btn-main" disabled={!!exportWhat} onClick={() => setExportWhat(tab)}>
+          {exportWhat === tab ? <span className="spinner" /> : "⬇️"} {tab === "cover" ? "Cover" : "Index"} PDF
+        </button>
+        <button className="btn-outline" disabled={!!exportWhat} onClick={() => setExportWhat("both")}>
+          {exportWhat === "both" ? <span className="spinner dark" /> : null} Cover + Index
+        </button>
+      </div>
+
+      {/* Full-size pages used only for making the PDF (kept off-screen) */}
+      <div className="export-root" aria-hidden="true" ref={exportRef}>
+        {(exportWhat === "cover" || exportWhat === "both") && <CoverT d={cover} />}
+        {(exportWhat === "index" || exportWhat === "both") && <IndexT cover={cover} index={index} />}
       </div>
 
       {toast && (

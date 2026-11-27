@@ -13,8 +13,12 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  // Cloudflare Browser Run: turns pages into real A4 PDFs (free: 10 minutes/day).
+  "browser": {
+    "binding": "BROWSER"
+  },
   "vars": {
-    "APP_VERSION": "0.3.0",
+    "APP_VERSION": "0.3.5",
     "FIREBASE_PROJECT_ID": "textile-cover-generator",
     "CLOUDINARY_CLOUD_NAME": "hh9hmbra"
   }
