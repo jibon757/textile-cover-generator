@@ -122,20 +122,23 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
         </div>
       )}
 
-      {others.length > 0 && (
-        <>
-          <button type="button" className="btn-link" onClick={() => setShowAll(!showAll)}>
-            {showAll ? "Hide other subjects' pictures" : `Show other subjects' pictures (${others.length})`}
-          </button>
-          {showAll && (
-            <div className="img-grid">
-              {others.map((img) => (
-                <Thumb key={img.id} src={img.url} label={img.subjectName} on={d.illustration === img.url} onClick={() => pick(img.url)} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
+      <h4 className="img-h">All pictures <em className="hint">(swipe → and tap the one you like)</em></h4>
+      {library && (() => {
+        const seen = new Set();
+        const all = [...(library.approved || []), ...(library.common || [])].filter((x) => x.url && !seen.has(x.url) && seen.add(x.url));
+        return all.length ? (
+          <div className="img-swipe">
+            {all.map((img) => (
+              <button type="button" key={img.id + img.url} className={"swipe-card" + (d.illustration === img.url ? " on" : "")} onClick={() => pick(img.url)}>
+                <img src={img.url} alt={img.subjectName || img.title || "Picture"} loading="lazy" />
+                <span>{d.illustration === img.url ? "✓ Selected" : img.subjectName || img.title || "Use this"}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">No pictures yet.</p>
+        );
+      })()}
 
       <div className="ai-box">
         <h4 className="img-h">✨ AI pictures</h4>

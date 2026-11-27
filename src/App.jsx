@@ -165,6 +165,12 @@ export default function App() {
       }
     }
     if (!used.subjectName.trim()) return;
+    // A ready picture (not AI, not own upload): link it to this subject for next time.
+    if (c.illustration && !c.illustration.startsWith("data:") && !c.illustrationTrial) {
+      api("/api/images/link", { method: "POST", body: { url: c.illustration, subjectName: c.subjectName, subjectCode: c.subjectCode } })
+        .then((r) => !r.existed && !r.skipped && loadLibrary())
+        .catch(() => {});
+    }
     try {
       const r = await api("/api/designs", { method: "POST", body: { design: designFromCover(used, coverTpl, indexTpl) } });
       if (!r.existed) setDesignsVersion((v) => v + 1);

@@ -388,6 +388,25 @@ async function shareOwnImage(request, env) {
   return json({ ok: true, ...r });
 }
 
+// After a cover download with a library or universal picture: link that picture to the
+// student's subject, so it shows first for this subject next time. One link per subject + picture.
+async function linkImage(request, env) {
+  const user = await requireUser(request, env);
+  const body = await request.json().catch(() => ({}));
+  const url = allowedImageUrl(body.url, env);
+  const n = clean(body.subjectName, 150);
+  const c = clean(body.subjectCode, 40);
+  const k = collegeKey((c + " " + n).trim());
+  if (!url || !k) return json({ ok: true, skipped: true });
+  const id = "l-" + (await sha256Hex("link|" + k + "|" + url)).slice(0, 38);
+  const db = new Firestore(env);
+  if (await db.get("approvedImages/" + id)) return json({ ok: true, existed: true });
+  await rateLimit(db, user.uid, "link", 30);
+  await db.createIfMissing("approvedImages", id, { url, subjectName: n, subjectCode: c, subjectKey: k, provider: "", source: "linked", status: "visible", createdBy: user.uid, createdAt: new Date() });
+  await bust("images-v1");
+  return json({ ok: true, existed: false });
+}
+
 // ---------- PDF ----------
 const MAX_HTML_BYTES = 15 * 1024 * 1024;
 const PDF_QUOTA_MSG = "Today's free PDF limit is used up. It resets at 6:00 AM (Bangladesh time).";
@@ -539,6 +558,7 @@ export default {
       if (p === "/api/ai/generate" && m === "POST") return await aiGenerate(request, env);
       if (p === "/api/images/approve" && m === "POST") return await approveImage(request, env);
       if (p === "/api/images/share" && m === "POST") return await shareOwnImage(request, env);
+      if (p === "/api/images/link" && m === "POST") return await linkImage(request, env);
       if (p === "/api/settings" && m === "GET") return await publicSettings(env, ctx);
       if (p.startsWith("/api/admin/") || p === "/api/admin") {
         return await handleAdmin(request, env, ctx, { json, userError, bust, allowedImageUrl, clean, getUser, collegeKey, ensureDefaultCollege });

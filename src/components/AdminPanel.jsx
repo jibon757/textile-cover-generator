@@ -354,31 +354,8 @@ function Pictures({ notify, confirm }) {
   const srcName = { ai: "AI", "ai-prompt": "AI (own prompt)", upload: "Student upload", owner: "Added by you" };
   return (
     <>
-      <h3 className="adm-h">📚 Subject pictures</h3>
-      <p className="hint">Pictures for one subject. Students who type this subject see them first. You can choose many at once.</p>
-      <div className="adm-form">
-        <div className="adm-row2">
-          <label className="field">
-            <span className="field-label">Subject name</span>
-            <input value={subj.name} onChange={(e) => setSubj({ ...subj, name: e.target.value })} placeholder="e.g. Textile Coloration-I" />
-          </label>
-          <label className="field">
-            <span className="field-label">Subject code</span>
-            <input value={subj.code} onChange={(e) => setSubj({ ...subj, code: e.target.value })} placeholder="e.g. WPE-302" />
-          </label>
-        </div>
-        <label className="btn-soft adm-file">
-          📁 Choose pictures {subj.files.length ? `(${subj.files.length} chosen, tap to add more)` : ""}
-          <input type="file" multiple accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => pick(e, setSubj)} />
-        </label>
-        <Chosen box={subj} setter={setSubj} />
-        <button className="btn-main" disabled={!!busy || !subj.files.length} onClick={() => uploadAll("subject")}>
-          {progress("subject") ? <><span className="spinner" /> {progress("subject")}</> : `Upload ${subj.files.length || ""} for this subject`}
-        </button>
-      </div>
-
       <h3 className="adm-h">🌐 Universal pictures</h3>
-      <p className="hint">Pictures for every subject (shown to all students). You can choose many at once.</p>
+      <p className="hint">Upload many pictures at once. They are for every subject; when a student downloads a cover with one, it is linked to that subject automatically.</p>
       <div className="adm-form">
         <label className="field">
           <span className="field-label">Tags <em>(optional words students may search, e.g. lab beaker fabric)</em></span>
