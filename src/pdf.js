@@ -35,14 +35,16 @@ export function buildPdfHtml(rootEl) {
 </head><body><div class="export-root">${pages}</div></body></html>`;
 }
 
-export async function downloadPdf(rootEl, fileName) {
+import { authHeader } from "./api.js";
+
+export async function downloadPdf(rootEl, fileName, meta) {
   const html = buildPdfHtml(rootEl);
   let res;
   try {
     res = await fetch("/api/pdf", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ html }),
+      headers: { "content-type": "application/json", ...(await authHeader()) },
+      body: JSON.stringify({ html, meta }),
     });
   } catch {
     throw new Error("No internet connection. Please check and try again.");

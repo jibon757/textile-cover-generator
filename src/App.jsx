@@ -1,11 +1,13 @@
-// Phase 3: Cover + Index generator with live A4 preview.
+// Cover + Index generator with live A4 preview, shared colleges/designs and optional Google cloud save.
 import { useEffect, useRef, useState, useCallback } from "react";
 import { emptyCover, emptyIndex } from "./data.js";
 import { COVER_TEMPLATES } from "./templates/covers.jsx";
 import { INDEX_TEMPLATES } from "./templates/indexes.jsx";
 import { CoverEditor, IndexEditor } from "./components/Editors.jsx";
 import ScaledPage from "./components/ScaledPage.jsx";
-import { auth, signInAnonymously } from "./firebase.js";
+import { auth, signInAnonymously, onAuthStateChanged, signOut, signInWithGoogle, googleErrorMessage } from "./firebase.js";
+import { api } from "./api.js";
+import DesignLibrary from "./components/DesignLibrary.jsx";
 import { downloadPdf, pdfFileName } from "./pdf.js";
 
 const DRAFT_KEY = "tcg.draft.v1";
@@ -40,6 +42,11 @@ export default function App() {
   const [exportWhat, setExportWhat] = useState(null); // null | "cover" | "index" | "both"
   const exportRef = useRef(null);
   const [saveState, setSaveState] = useState("saved");
+  const [user, setUser] = useState(null);
+  const [cloudReady, setCloudReady] = useState(false); // true after the Google copy was loaded
+  const [cloudState, setCloudState] = useState(""); // "" | "saving" | "saved" | "error"
+  const [stats, setStats] = useState({ cover: {}, index: {} });
+  const isGoogle = !!user && !user.isAnonymous;
 
   const notify = useCallback((type, text) => {
     setToast({ type, text, id: Date.now() });
@@ -52,10 +59,127 @@ export default function App() {
 
   const confirm = useCallback((text) => new Promise((resolve) => setDialog({ text, resolve })), []);
 
-  // Anonymous visitor ID (used later for fair-use limits; no personal data).
+  // Visitor ID: anonymous by default (no personal data), Google only if the visitor chooses.
   useEffect(() => {
-    if (!auth.currentUser) signInAnonymously(auth).catch(() => {});
+    const stop = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (!u) signInAnonymously(auth).catch(() => {});
+    });
+    return stop;
   }, []);
+
+  // Template ranking: most downloaded first.
+  useEffect(() => {
+    api("/api/stats", { auth: false })
+      .then((r) => setStats(r.stats))
+      .catch(() => {});
+  }, []);
+
+  // When signed in with Google: load the copy saved in the cloud once.
+  useEffect(() => {
+    if (!isGoogle) {
+      setCloudReady(false);
+      setCloudState("");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { doc } = await api("/api/my/doc");
+        if (cancelled) return;
+        if (doc?.cover) {
+          const localHasData = !!(cover.student.name || cover.student.id);
+          const same = JSON.stringify(doc.cover.student) === JSON.stringify(cover.student);
+          if (!localHasData || same || (await confirm("Load the details saved in your Google account? (This replaces what is on this device now.)"))) {
+            const base = emptyCover();
+            setCover({ ...base, ...doc.cover, student: { ...base.student, ...doc.cover.student }, teacher: { ...base.teacher, ...doc.cover.teacher } });
+            if (doc.index?.rows?.length) setIndex(doc.index);
+            if (doc.coverTpl) setCoverTpl(doc.coverTpl);
+            if (doc.indexTpl) setIndexTpl(doc.indexTpl);
+          }
+        }
+        if (!cancelled) setCloudReady(true);
+      } catch (err) {
+        if (!cancelled) {
+          setCloudState("error");
+          notify("error", "Could not load your cloud copy: " + err.message);
+          setCloudReady(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGoogle, user?.uid]);
+
+  // While signed in with Google: also save to the cloud (owner-only).
+  useEffect(() => {
+    if (!isGoogle || !cloudReady) return;
+    setCloudState("saving");
+    const t = setTimeout(async () => {
+      let doc = { cover, index, coverTpl, indexTpl };
+      if (JSON.stringify(doc).length > 850_000) {
+        // Very large device pictures stay on this device only.
+        const strip = (u) => (u && u.startsWith("data:") ? "" : u);
+        doc = { ...doc, cover: { ...cover, logo: strip(cover.logo), illustration: strip(cover.illustration) } };
+      }
+      try {
+        await api("/api/my/doc", { method: "PUT", body: { doc } });
+        setCloudState("saved");
+      } catch (err) {
+        setCloudState("error");
+        if (err.status !== 429) notify("error", "Cloud save failed: " + err.message + " Your work is still saved on this device.");
+      }
+    }, 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cover, index, coverTpl, indexTpl, isGoogle, cloudReady]);
+
+  async function googleIn() {
+    try {
+      await signInWithGoogle();
+      notify("success", "Signed in. Your details will also be saved in your Google account.");
+    } catch (err) {
+      notify("error", googleErrorMessage(err));
+    }
+  }
+  async function googleOut() {
+    const clear = await confirm("Sign out? Press 'Yes' to also remove your personal details from this device (good on a shared phone/computer).");
+    try {
+      await signOut(auth);
+      if (clear) setCover((c) => ({ ...c, student: emptyCover().student }));
+      notify("success", "Signed out.");
+    } catch {
+      notify("error", "Sign-out failed. Please try again.");
+    }
+  }
+
+  function pickCollege(c) {
+    setCover((cv) => ({ ...cv, collegeId: c.id, collegeName: c.name, logo: c.logoUrl || "" }));
+  }
+
+  function applyDesign(d) {
+    setCover((cv) => ({
+      ...cv,
+      subjectName: d.subjectName || "",
+      subjectCode: d.subjectCode || "",
+      reportType: d.reportType || cv.reportType,
+      department: d.department || cv.department,
+      level: d.level || cv.level,
+      term: d.term || cv.term,
+      collegeId: d.collegeId || cv.collegeId,
+      collegeName: d.collegeName || cv.collegeName,
+      logo: d.logoUrl || cv.logo,
+      illustration: d.illustration || cv.illustration,
+      feather: typeof d.feather === "number" ? d.feather : cv.feather,
+      featherShape: d.featherShape || cv.featherShape,
+      blend: d.blend !== false,
+    }));
+    if (COVER_TEMPLATES.some((t) => t.id === d.coverTemplate)) setCoverTpl(d.coverTemplate);
+    if (INDEX_TEMPLATES.some((t) => t.id === d.indexTemplate)) setIndexTpl(d.indexTemplate);
+    notify("success", "Design applied. Now add your own details.");
+  }
 
   // Auto-save the draft on this device only.
   useEffect(() => {
@@ -82,7 +206,7 @@ export default function App() {
         await document.fonts?.ready;
         await new Promise((r) => setTimeout(r, 250));
         if (cancelled) return;
-        await downloadPdf(exportRef.current, pdfFileName(cover, exportWhat));
+        await downloadPdf(exportRef.current, pdfFileName(cover, exportWhat), { what: exportWhat, coverTemplate: coverTpl, indexTemplate: indexTpl });
         notify("success", "PDF downloaded.");
       } catch (err) {
         notify("error", err.message);
@@ -98,7 +222,8 @@ export default function App() {
 
   const CoverT = (COVER_TEMPLATES.find((t) => t.id === coverTpl) || COVER_TEMPLATES[0]).Component;
   const IndexT = (INDEX_TEMPLATES.find((t) => t.id === indexTpl) || INDEX_TEMPLATES[0]).Component;
-  const templates = tab === "cover" ? COVER_TEMPLATES : INDEX_TEMPLATES;
+  const kindStats = (tab === "cover" ? stats.cover : stats.index) || {};
+  const templates = [...(tab === "cover" ? COVER_TEMPLATES : INDEX_TEMPLATES)].sort((a, b) => (kindStats[b.id] || 0) - (kindStats[a.id] || 0));
   const activeTpl = tab === "cover" ? coverTpl : indexTpl;
   const setTpl = tab === "cover" ? setCoverTpl : setIndexTpl;
   const page = tab === "cover" ? <CoverT d={cover} /> : <IndexT cover={cover} index={index} />;
@@ -127,7 +252,19 @@ export default function App() {
             Index
           </button>
         </nav>
-        <div className={"save-state " + saveState}>{saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : "Saved on this device"}</div>
+        <div className={"save-state " + (isGoogle ? cloudState || "saving" : saveState)}>
+          {isGoogle
+            ? cloudState === "saved"
+              ? "Saved to your Google account"
+              : cloudState === "error"
+                ? "Cloud save failed · saved on this device"
+                : "Saving to your Google account…"
+            : saveState === "saving"
+              ? "Saving…"
+              : saveState === "error"
+                ? "Not saved"
+                : "Saved on this device"}
+        </div>
       </header>
 
       <div className="mobile-switch">
@@ -142,11 +279,40 @@ export default function App() {
       <main className={"workspace show-" + mobileView}>
         <div className="left">
           {tab === "cover" ? (
-            <CoverEditor d={cover} set={setCover} notify={notify} />
+            <CoverEditor d={cover} set={setCover} notify={notify} onPickCollege={pickCollege}>
+              <DesignLibrary
+                cover={cover}
+                coverTpl={coverTpl}
+                indexTpl={indexTpl}
+                templateNames={Object.fromEntries(COVER_TEMPLATES.map((t) => [t.id, t.name]))}
+                onApply={applyDesign}
+                notify={notify}
+                confirm={confirm}
+              />
+            </CoverEditor>
           ) : (
             <IndexEditor index={index} set={setIndex} notify={notify} confirm={confirm} />
           )}
           <div className="left-foot">
+            <div className="account-box">
+              {isGoogle ? (
+                <>
+                  <span>
+                    ☁️ Signed in as <strong>{user.email || user.displayName || "Google user"}</strong>
+                  </span>
+                  <button type="button" className="btn-link" onClick={googleOut}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span>Want your details on every device? (optional)</span>
+                  <button type="button" className="btn-google" onClick={googleIn}>
+                    <span aria-hidden="true">G</span> Sign in with Google
+                  </button>
+                </>
+              )}
+            </div>
             <button type="button" className="btn-link danger" onClick={clearMine}>
               Clear my personal details
             </button>
@@ -167,6 +333,7 @@ export default function App() {
                 <button key={t.id} className={"tpl-card" + (t.id === activeTpl ? " on" : "")} onClick={() => setTpl(t.id)}>
                   <ScaledPage maxWidth={96}>{tab === "cover" ? <T d={cover} /> : <T cover={cover} index={index} />}</ScaledPage>
                   <span>{t.name}</span>
+                  {kindStats[t.id] > 0 && <small className="dl-count">⬇ {kindStats[t.id]}</small>}
                 </button>
               );
             })}

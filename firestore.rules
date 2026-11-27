@@ -1,0 +1,13 @@
+rules_version = '2';
+// Textile Cover Generator — Firestore Security Rules.
+// Browsers can NOT read or write the database directly.
+// Everything goes through our Cloudflare Worker (/api/...), which uses the
+// service account, checks who is asking, removes personal data from shared
+// designs, prevents duplicates and applies daily limits.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

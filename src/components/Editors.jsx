@@ -2,6 +2,7 @@
 import { useRef } from "react";
 import { DEPARTMENTS, LEVELS, TERMS, DEFAULT_COLLEGE, SAMPLE_ILLUSTRATION, MAX_INDEX_ROWS, newId } from "../data.js";
 import { readImageFile } from "../imageTools.js";
+import CollegePicker from "./CollegePicker.jsx";
 
 function Field({ label, optional, children }) {
   return (
@@ -53,7 +54,7 @@ function ImagePicker({ label, onPick, notify, maxSide }) {
   );
 }
 
-export function CoverEditor({ d, set, notify }) {
+export function CoverEditor({ d, set, notify, onPickCollege, children }) {
   const up = (patch) => set({ ...d, ...patch });
   const upS = (patch) => set({ ...d, student: { ...d.student, ...patch } });
   const upT = (patch) => set({ ...d, teacher: { ...d.teacher, ...patch } });
@@ -62,20 +63,26 @@ export function CoverEditor({ d, set, notify }) {
   return (
     <div className="editor">
       <Section title="College" icon="🏛️">
-        <Field label="College name">
-          <textarea rows={2} value={d.collegeName} onChange={txt(up, "collegeName")} />
-        </Field>
-        <div className="logo-row">
-          <div className="logo-thumb">{d.logo ? <img src={d.logo} alt="Logo" /> : <span>No logo</span>}</div>
-          <div className="btn-col">
-            <ImagePicker label="Upload logo" onPick={(logo) => up({ logo })} notify={notify} maxSide={800} />
-            <button type="button" className="btn-link" onClick={() => up({ collegeName: DEFAULT_COLLEGE.name, logo: DEFAULT_COLLEGE.logo })}>
-              Reset to GTEC
-            </button>
+        <CollegePicker value={d} onPick={onPickCollege} notify={notify} />
+        <details className="fine-tune">
+          <summary>Change name or logo only on my cover</summary>
+          <Field label="College name (as printed)">
+            <textarea rows={2} value={d.collegeName} onChange={txt(up, "collegeName")} />
+          </Field>
+          <div className="logo-row">
+            <div className="logo-thumb">{d.logo ? <img src={d.logo} alt="Logo" /> : <span>No logo</span>}</div>
+            <div className="btn-col">
+              <ImagePicker label="Use another logo" onPick={(logo) => up({ logo })} notify={notify} maxSide={800} />
+              <button type="button" className="btn-link" onClick={() => up({ collegeId: DEFAULT_COLLEGE.id, collegeName: DEFAULT_COLLEGE.name, logo: DEFAULT_COLLEGE.logo })}>
+                Reset to GTEC
+              </button>
+            </div>
           </div>
-        </div>
-        <p className="hint">Saving new colleges for everyone arrives in Phase 4.</p>
+          <p className="hint">Changes here stay on your cover only. To add a college for everyone, use "add it" in the list above.</p>
+        </details>
       </Section>
+
+      {children}
 
       <Section title="Report & Subject" icon="📘">
         <Field label="Department">
@@ -118,7 +125,7 @@ export function CoverEditor({ d, set, notify }) {
       </Section>
 
       <Section title="Submitted By (you)" icon="🎓">
-        <p className="hint private">🔒 Your personal details stay on this device. They are never shared.</p>
+        <p className="hint private">🔒 Your personal details stay on this device (and in your own Google account if you sign in). They are never shared.</p>
         <Field label="Student name">
           <input value={d.student.name} onChange={txt(upS, "name")} autoComplete="name" />
         </Field>

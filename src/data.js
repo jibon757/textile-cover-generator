@@ -1,8 +1,8 @@
 // Default values and helpers for the Cover and Index documents.
-// NOTE: The college list comes from the database in Phase 4. Until then only the
-// default college (GTEC) is built in, and every field stays editable.
+// The college list comes from the database; GTEC is the default. Every field stays editable.
 
 export const DEFAULT_COLLEGE = {
+  id: "gopalganj-textile-engineering-college-gopalganj",
   name: "Gopalganj Textile Engineering College, Gopalganj",
   logo: "/gtec-logo.jpeg",
 };
@@ -26,6 +26,7 @@ export const SAMPLE_ILLUSTRATION = "/img/sample-dyeing.jpg";
 
 export function emptyCover() {
   return {
+    collegeId: DEFAULT_COLLEGE.id,
     collegeName: DEFAULT_COLLEGE.name,
     logo: DEFAULT_COLLEGE.logo,
     department: "Wet Process Engineering",

@@ -223,3 +223,32 @@ input[type="range"] { padding: 0; accent-color: var(--green); }
   .tpl-strip { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
   .tpl-card { flex: 0 0 auto; scroll-snap-align: start; }
 }
+
+/* ============ Phase 4: college picker, designs, account ============ */
+.college-picker { display: flex; flex-direction: column; gap: 8px; }
+.picker-btn { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; min-height: 52px; font: inherit; font-weight: 600; color: #1b1b1b; }
+.picker-name { flex: 1; line-height: 1.3; }
+.picker-logo { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border-radius: 8px; overflow: hidden; background: #f4f6f4; }
+.picker-logo.small { width: 30px; height: 30px; flex-basis: 30px; }
+.picker-logo img { width: 100%; height: 100%; object-fit: contain; }
+.picker-panel { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; background: #fafcfa; display: flex; flex-direction: column; gap: 8px; }
+.picker-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.picker-list button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: #fff; border: 1px solid transparent; border-radius: 10px; padding: 8px 10px; min-height: 48px; font: inherit; font-size: 14px; }
+.picker-list button.on { border-color: var(--green-2); background: #eef8f1; }
+.badge { font-style: normal; font-size: 10.5px; color: #8a5a00; background: #fff3d6; border-radius: 8px; padding: 2px 6px; margin-left: auto; white-space: nowrap; }
+.add-college { display: flex; flex-direction: column; gap: 8px; }
+.row-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.full { width: 100%; }
+.error-text { color: #b3261e; }
+.fine-tune { margin-top: 10px; }
+.fine-tune summary { cursor: pointer; font-size: 13px; color: var(--blue); padding: 8px 0; }
+.design-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.design-list li { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.design-list li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.design-list strong { font-size: 14px; }
+.design-list span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+.account-box strong { color: #1b1b1b; word-break: break-all; }
+.btn-google { display: inline-flex; align-items: center; gap: 8px; border: 1.5px solid #dadce0; background: #fff; border-radius: 22px; padding: 8px 14px; min-height: 42px; font: inherit; font-weight: 600; color: #3c4043; }
+.btn-google > span { font-weight: 800; color: #4285f4; }
+.dl-count { font-size: 10.5px; color: var(--green); font-weight: 700; }
