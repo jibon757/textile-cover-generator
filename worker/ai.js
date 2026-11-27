@@ -94,18 +94,34 @@ const SCENES = [
   [/physics/i, "physics laboratory: pendulum, lenses and light rays"],
 ];
 
-export function buildPrompt(subjectName, idea) {
+// Landscape size for the cover picture area (about 2 : 1 on every template).
+export const IMG_W = 1280;
+export const IMG_H = 640;
+
+// "Generate with AI": the prompt is made from the subject name.
+export function buildPrompt(subjectName) {
   const s = String(subjectName || "").slice(0, 120);
-  const scene = (SCENES.find(([re]) => re.test(s)) || [null, `an illustration representing the subject "${s}" in textile engineering`])[1];
-  const extra = idea ? ` Details: ${String(idea).slice(0, 200)}.` : "";
+  const scene = (SCENES.find(([re]) => re.test(s)) || [null, `the main equipment and materials used in a "${s}" lab class of textile engineering`])[1];
   return (
-    `Clean modern flat vector illustration for a university lab report cover about "${s}": ${scene}.${extra} ` +
-    "Centered composition, soft pastel colors, pure white background, soft edges fading into white, " +
-    "no border, no frame, no text, no letters, no watermark."
+    `Cute cartoon clip art illustration for the cover of a university lab report on "${s}": ${scene}. ` +
+    "Wide landscape composition, objects arranged side by side across the frame, flat vector clipart style, " +
+    "bold clean outlines, bright friendly colors, plain pure white background, nothing behind the objects, " +
+    "soft edges fading into white, no border, no frame, no shadow box, no text, no letters, no watermark."
   );
 }
 
+// "Own prompt": the student's own words, used as written.
+export function buildOwnPrompt(text) {
+  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 1000);
+}
+
 // ---------- adapters ----------
+function sniffMime(b) {
+  if (b[0] === 0x89 && b[1] === 0x50) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8) return "image/jpeg";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57) return "image/webp";
+  return "image/png";
+}
 // Each returns { bytes: Uint8Array, mime } or throws. Errors starting with "QUOTA:" mean "free limit used up".
 async function readImageResponse(res, name) {
   if (res.status === 429 || res.status === 402) throw new Error(`QUOTA: ${name} limit reached.`);
@@ -123,24 +139,48 @@ async function readImageResponse(res, name) {
   throw new Error(`${name} returned no image.`);
 }
 
-// Small style hints so each trial picture looks a little different.
-const LOOKS = ["Gentle blue and teal tones.", "Warm orange and pink tones.", "Fresh green and yellow tones.", "Purple and sky-blue tones.", "Slightly isometric view.", "Front view, simple shapes."];
-
 const ADAPTERS = {
+  // Cloudflare Workers AI, FLUX.2 [klein] 4B: makes a real LANDSCAPE picture (width x height).
+  // Input is sent as multipart form data (this model's required format).
+  "workers-ai-flux2": async (p, prompt, env) => {
+    if (!env.AI) throw new Error("Workers AI is not connected (AI binding missing).");
+    const form = new FormData();
+    form.append("prompt", prompt.slice(0, 2048));
+    form.append("width", String(p.width || IMG_W));
+    form.append("height", String(p.height || IMG_H));
+    const packed = new Response(form);
+    let out;
+    try {
+      out = await env.AI.run(p.model || "@cf/black-forest-labs/flux-2-klein-4b", {
+        multipart: { body: packed.body, contentType: packed.headers.get("content-type") },
+      });
+    } catch (e) {
+      const m = String(e?.message || e);
+      if (/neuron|quota|exceed|429|4006/i.test(m)) throw new Error("QUOTA: Workers AI daily free limit reached.");
+      throw new Error("Workers AI (FLUX.2) failed: " + m.slice(0, 160));
+    }
+    if (out?.image) {
+      const bytes = unb64(String(out.image).replace(/^data:[^,]+,/, ""));
+      return { bytes, mime: sniffMime(bytes) };
+    }
+    throw new Error("Workers AI (FLUX.2) returned no image.");
+  },
   // Cloudflare Workers AI (binding "AI"). Free: 10,000 neurons per day, resets 00:00 UTC (6:00 AM Bangladesh).
   "workers-ai": async (p, prompt, env) => {
     if (!env.AI) throw new Error("Workers AI is not connected (AI binding missing).");
     let out;
     try {
       // flux-1-schnell accepts ONLY "prompt" and "steps" (extra fields like "seed" are rejected).
-      const look = LOOKS[Math.floor(Math.random() * LOOKS.length)];
-      out = await env.AI.run(p.model || "@cf/black-forest-labs/flux-1-schnell", { prompt: (prompt + " " + look).slice(0, 2048), steps: 4 });
+      out = await env.AI.run(p.model || "@cf/black-forest-labs/flux-1-schnell", { prompt: prompt.slice(0, 2048), steps: 4 });
     } catch (e) {
       const m = String(e?.message || e);
       if (/neuron|quota|limit|exceed|429|4006/i.test(m)) throw new Error("QUOTA: Workers AI daily free limit reached.");
       throw new Error("Workers AI failed: " + m.slice(0, 160));
     }
-    if (out?.image) return { bytes: unb64(out.image), mime: "image/jpeg" };
+    if (out?.image) {
+      const bytes = unb64(out.image);
+      return { bytes, mime: sniffMime(bytes) };
+    }
     if (out instanceof ReadableStream || out instanceof ArrayBuffer || out instanceof Uint8Array) {
       return { bytes: new Uint8Array(await new Response(out).arrayBuffer()), mime: "image/png" };
     }
@@ -158,7 +198,7 @@ const ADAPTERS = {
     const res = await fetch(p.endpoint || "https://api.together.xyz/v1/images/generations", {
       method: "POST",
       headers: { authorization: "Bearer " + p.apiKey, "content-type": "application/json" },
-      body: JSON.stringify({ model: p.model || "black-forest-labs/FLUX.1-schnell-Free", prompt, width: 1024, height: 1024, steps: 4, n: 1, response_format: "b64_json" }),
+      body: JSON.stringify({ model: p.model || "black-forest-labs/FLUX.1-schnell-Free", prompt, width: IMG_W, height: IMG_H, steps: 4, n: 1, response_format: "b64_json" }),
     });
     return readImageResponse(res, "Together AI");
   },
@@ -187,14 +227,19 @@ const ADAPTERS = {
   },
   // Free, no key, but slow and shared (one picture per 45 s per server address). Off by default.
   "pollinations": async (p, prompt) => {
-    const res = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&nologo=true`);
+    const res = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${IMG_W}&height=${IMG_H}&nologo=true`);
     return readImageResponse(res, "Pollinations");
   },
 };
 export const PROVIDER_TYPES = Object.keys(ADAPTERS);
 
 // Built-in default. Admin-panel providers (Firestore "aiProviders") are added to this list.
-const DEFAULT_PROVIDERS = [{ id: "workers-ai", type: "workers-ai", name: "Cloudflare Workers AI", enabled: true, priority: 1, dailyLimit: 150 }];
+// 1st: FLUX.2 klein (landscape). 2nd (backup): FLUX.1 schnell (square picture, fits the same area).
+// Both use the same free 10,000 neurons per day.
+const DEFAULT_PROVIDERS = [
+  { id: "workers-ai-flux2", type: "workers-ai-flux2", name: "Cloudflare Workers AI (FLUX.2 klein)", enabled: true, priority: 1, dailyLimit: 100 },
+  { id: "workers-ai", type: "workers-ai", name: "Cloudflare Workers AI (FLUX.1 schnell)", enabled: true, priority: 2, dailyLimit: 150 },
+];
 
 export async function loadProviders(env, db) {
   let saved = [];
@@ -241,7 +286,8 @@ export async function generateWithFallback(env, db, prompt) {
       const img = await ADAPTERS[p.type](p, prompt, env);
       if (!img.bytes?.length) throw new Error("empty image");
       await db.increment(usageId, { provider: p.id, day: dayUTC() }, { count: 1 }).catch(() => {});
-      return { ...img, provider: p.id };
+      if (problems.length) console.warn("AI fallback used:", problems.join(" | "));
+      return { ...img, provider: p.id, skipped: problems };
     } catch (e) {
       const m = String(e?.message || e);
       if (!m.startsWith("QUOTA:")) quotaOnly = false;

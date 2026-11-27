@@ -107,6 +107,17 @@ export default function App() {
         if (err.code === "trial_expired" || err.code === "trial_mismatch") setCover((cv) => ({ ...cv, illustrationTrial: null }));
         used = { ...c, illustration: "" }; // the trial picture itself is never shared
       }
+    } else if (c.illustration?.startsWith("data:")) {
+      // The student's own picture: shared in the library after the download (owner's rule).
+      try {
+        const r = await api("/api/images/share", { method: "POST", body: { image: c.illustration, subjectName: c.subjectName, subjectCode: c.subjectCode } });
+        used = { ...c, illustration: r.url };
+        const ownImage = c.illustration;
+        setCover((cv) => (cv.illustration === ownImage ? { ...cv, illustration: r.url } : cv));
+        loadLibrary();
+      } catch {
+        used = { ...c, illustration: "" };
+      }
     }
     if (!used.subjectName.trim()) return;
     try {

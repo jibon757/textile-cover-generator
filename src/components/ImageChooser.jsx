@@ -1,8 +1,9 @@
 // "Illustration" section: pick a picture for the cover.
 //  1) Approved pictures for this subject (made by AI for other students, saved after their download)
 //  2) Common pictures (added by the site owner)
-//  3) ✨ AI Generate: a few trial pictures; nothing is saved until you download your cover
-//  4) Your own image from this device (private, never shared)
+//  3) ✨ AI: "Generate with AI" (prompt made from the subject) or "Own prompt" (student's words).
+//     Trial pictures are not saved until the cover is downloaded.
+//  4) Your own image from this device (shared in the library after the cover is downloaded)
 import { useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import { readImageFile } from "../imageTools.js";
@@ -25,7 +26,8 @@ function Thumb({ src, label, on, onClick }) {
 }
 
 export default function ImageChooser({ d, up, notify, confirm, library, reloadLibrary, trials, setTrials }) {
-  const [idea, setIdea] = useState("");
+  const [mode, setMode] = useState("auto"); // "auto" | "prompt"
+  const [ownPrompt, setOwnPrompt] = useState("");
   const [busy, setBusy] = useState(null); // null | { n, of }
   const [showAll, setShowAll] = useState(false);
   const fileInput = useRef(null);
@@ -47,12 +49,13 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
   const pick = (url, trialToken = null) => up({ illustration: url, illustrationTrial: trialToken });
 
   async function generate() {
-    if (!d.subjectName.trim()) return notify("error", "Write the subject name first (Report & Subject), so the picture matches it.");
+    if (mode === "auto" && !d.subjectName.trim()) return notify("error", "Write the subject name first (Report & Subject), so the picture matches it.");
+    if (mode === "prompt" && ownPrompt.trim().length < 5) return notify("error", "Write your prompt first (what the picture should show).");
     const made = [];
     try {
       for (let i = 1; i <= TRIALS_PER_ROUND; i++) {
         setBusy({ n: i, of: TRIALS_PER_ROUND });
-        const r = await api("/api/ai/generate", { method: "POST", body: { subjectName: d.subjectName, subjectCode: d.subjectCode, idea } });
+        const r = await api("/api/ai/generate", { method: "POST", body: { mode, prompt: mode === "prompt" ? ownPrompt : "", subjectName: d.subjectName, subjectCode: d.subjectCode } });
         made.push({ id: r.token.slice(-12), image: r.image, token: r.token });
         setTrials((t) => [...t, made[made.length - 1]]);
       }
@@ -82,7 +85,7 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
             {usingTrial
               ? "✨ AI trial picture. It is added to the library for everyone only after you download your cover PDF."
               : usingOwn
-                ? "🔒 Your own image. It stays private (not shared with anyone)."
+                ? "📁 Your own image. After you download the cover, it is added to the library for everyone."
                 : d.illustration
                   ? "Picture from the library."
                   : "No picture on the cover."}
@@ -133,16 +136,38 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
       )}
 
       <div className="ai-box">
-        <h4 className="img-h">✨ AI Generate</h4>
-        <p className="hint">Makes {TRIALS_PER_ROUND} trial pictures for "{d.subjectName.trim() || "your subject"}". Trials are not saved. Up to 9 per day.</p>
-        <input placeholder="Describe the picture (optional), e.g. dyeing machine with blue fabric" value={idea} maxLength={200} onChange={(e) => setIdea(e.target.value)} />
+        <h4 className="img-h">✨ AI pictures</h4>
+        <div className="seg" role="tablist">
+          <button type="button" role="tab" aria-selected={mode === "auto"} className={mode === "auto" ? "on" : ""} onClick={() => setMode("auto")}>
+            ✨ Generate with AI
+          </button>
+          <button type="button" role="tab" aria-selected={mode === "prompt"} className={mode === "prompt" ? "on" : ""} onClick={() => setMode("prompt")}>
+            ✍️ Own prompt
+          </button>
+        </div>
+        {mode === "auto" ? (
+          <p className="hint">
+            Makes {TRIALS_PER_ROUND} landscape clip-art pictures for "{d.subjectName.trim() || "your subject"}" on a white background. Trials are not saved. Up to 9 per day.
+          </p>
+        ) : (
+          <>
+            <p className="hint">Write anything you want. Your words are used as written. Up to 9 pictures per day.</p>
+            <textarea
+              rows={3}
+              placeholder="e.g. cartoon dyeing machine with blue and red fabric, white background"
+              value={ownPrompt}
+              maxLength={1000}
+              onChange={(e) => setOwnPrompt(e.target.value)}
+            />
+          </>
+        )}
         <button type="button" className="btn-main full" onClick={generate} disabled={!!busy}>
           {busy ? (
             <>
               <span className="spinner" /> Making picture {busy.n} of {busy.of}…
             </>
           ) : (
-            "✨ AI Generate pictures"
+            mode === "auto" ? "✨ Generate with AI" : "✍️ Generate from my prompt"
           )}
         </button>
         {busy && (
@@ -166,7 +191,7 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
 
       <div className="own-box">
         <button type="button" className="btn-soft" onClick={() => fileInput.current.click()}>
-          📁 Use my own image (private)
+          📁 Use my own image
         </button>
         <input
           ref={fileInput}
@@ -179,7 +204,7 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
             if (!file) return;
             try {
               pick(await readImageFile(file, 1600), null);
-              notify("success", "Image added. It stays on your device only.");
+              notify("success", "Image added. After you download the cover, it is shared in the library for everyone.");
             } catch (err) {
               notify("error", err.message);
             }
