@@ -123,13 +123,18 @@ async function readImageResponse(res, name) {
   throw new Error(`${name} returned no image.`);
 }
 
+// Small style hints so each trial picture looks a little different.
+const LOOKS = ["Gentle blue and teal tones.", "Warm orange and pink tones.", "Fresh green and yellow tones.", "Purple and sky-blue tones.", "Slightly isometric view.", "Front view, simple shapes."];
+
 const ADAPTERS = {
   // Cloudflare Workers AI (binding "AI"). Free: 10,000 neurons per day, resets 00:00 UTC (6:00 AM Bangladesh).
   "workers-ai": async (p, prompt, env) => {
     if (!env.AI) throw new Error("Workers AI is not connected (AI binding missing).");
     let out;
     try {
-      out = await env.AI.run(p.model || "@cf/black-forest-labs/flux-1-schnell", { prompt, steps: 4, seed: Math.floor(Math.random() * 1e9) });
+      // flux-1-schnell accepts ONLY "prompt" and "steps" (extra fields like "seed" are rejected).
+      const look = LOOKS[Math.floor(Math.random() * LOOKS.length)];
+      out = await env.AI.run(p.model || "@cf/black-forest-labs/flux-1-schnell", { prompt: (prompt + " " + look).slice(0, 2048), steps: 4 });
     } catch (e) {
       const m = String(e?.message || e);
       if (/neuron|quota|limit|exceed|429|4006/i.test(m)) throw new Error("QUOTA: Workers AI daily free limit reached.");
@@ -249,7 +254,9 @@ export async function generateWithFallback(env, db, prompt) {
       : "AI picture could not be made right now. Please try again, or use a ready picture."
   );
   err.problems = problems;
+  console.error("AI providers failed:", problems.join(" | "));
   if (!quotaOnly) {
+    err.detail = problems.join(" | ").slice(0, 400);
     err.status = 503;
     err.expose = true;
     err.code = "ai_failed";

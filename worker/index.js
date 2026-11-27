@@ -18,7 +18,7 @@ function errorResponse(err) {
   const msg = String(err?.message || err);
   if (msg.startsWith("QUOTA:")) return json({ ok: false, code: "quota", error: msg.slice(6).trim() }, 429);
   if (msg.startsWith("SETUP:")) return json({ ok: false, code: "setup", error: "Server setup problem: " + msg.slice(6).trim() }, 503);
-  if (err?.status && (err.status < 500 || err.expose)) return json({ ok: false, code: err.code || "bad_request", error: msg }, err.status);
+  if (err?.status && (err.status < 500 || err.expose)) return json({ ok: false, code: err.code || "bad_request", error: msg, ...(err.detail ? { detail: err.detail } : {}) }, err.status);
   console.error("API error:", err?.stack || msg);
   return json({ ok: false, code: "server", error: "Something went wrong on the server. Please try again.", detail: msg.slice(0, 300) }, 500);
 }
