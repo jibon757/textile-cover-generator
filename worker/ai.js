@@ -273,10 +273,18 @@ const ADAPTERS = {
 };
 export const PROVIDER_TYPES = Object.keys(ADAPTERS);
 
+// Admin "Test" button: one picture from ONE provider (not counted, not stored).
+export async function testProvider(env, p, prompt) {
+  if (!ADAPTERS[p.type]) throw new Error("Unknown provider type.");
+  const img = await ADAPTERS[p.type](p, prompt, env);
+  if (!img.bytes?.length) throw new Error("empty image");
+  return img;
+}
+
 // Built-in default. Admin-panel providers (Firestore "aiProviders") are added to this list.
 // 1st: FLUX.2 klein (landscape). 2nd (backup): FLUX.1 schnell (square picture, fits the same area).
 // Both use the same free 10,000 neurons per day.
-const DEFAULT_PROVIDERS = [
+export const DEFAULT_PROVIDERS = [
   { id: "workers-ai-flux2", type: "workers-ai-flux2", name: "Cloudflare Workers AI (FLUX.2 klein)", enabled: true, priority: 1, dailyLimit: 100 },
   { id: "workers-ai", type: "workers-ai", name: "Cloudflare Workers AI (FLUX.1 schnell)", enabled: true, priority: 2, dailyLimit: 150 },
 ];

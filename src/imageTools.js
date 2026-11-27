@@ -1,13 +1,14 @@
 // Reads an image from the student's device, checks it, and shrinks it so it
-// stays light. The picture stays on this device only (it is NOT uploaded).
-import { MAX_IMAGE_MB } from "./data.js";
+// stays light (size limit is set by the owner in the Admin panel).
+import { siteSettings } from "./siteSettings.js";
 
 const OK_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 export async function readImageFile(file, maxSide = 1600) {
   if (!file) throw new Error("No file selected.");
   if (!OK_TYPES.includes(file.type)) throw new Error("Please choose a PNG, JPG or WebP image.");
-  if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(`Image is larger than ${MAX_IMAGE_MB} MB. Please choose a smaller one.`);
+  const maxMB = siteSettings.uploadMaxMB || 2;
+  if (file.size > maxMB * 1024 * 1024) throw new Error(`Image is larger than ${maxMB} MB. Please choose a smaller one.`);
 
   const url = URL.createObjectURL(file);
   try {

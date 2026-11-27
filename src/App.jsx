@@ -1,5 +1,5 @@
 // Cover + Index generator with live A4 preview, shared colleges/designs and optional Google cloud save.
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import { emptyCover, emptyIndex } from "./data.js";
 import { COVER_TEMPLATES } from "./templates/covers.jsx";
 import { INDEX_TEMPLATES } from "./templates/indexes.jsx";
@@ -9,6 +9,9 @@ import { auth, signInAnonymously, onAuthStateChanged, signOut, signInWithGoogle,
 import { api } from "./api.js";
 import DesignLibrary, { designFromCover } from "./components/DesignLibrary.jsx";
 import { downloadPdf, pdfFileName } from "./pdf.js";
+import { siteSettings, loadSiteSettings } from "./siteSettings.js";
+
+const AdminPanel = lazy(() => import("./components/AdminPanel.jsx"));
 
 const DRAFT_KEY = "tcg.draft.v1";
 
@@ -50,6 +53,9 @@ export default function App() {
   const [trials, setTrials] = useState([]); // AI trial pictures (only in this browser tab, never saved)
   const [designsVersion, setDesignsVersion] = useState(0);
   const isGoogle = !!user && !user.isAnonymous;
+  const [settings, setSettings] = useState({ ...siteSettings });
+  const [route, setRoute] = useState(() => window.location.hash);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const notify = useCallback((type, text) => {
     setToast({ type, text, id: Date.now() });
@@ -70,6 +76,38 @@ export default function App() {
     });
     return stop;
   }, []);
+
+  // Owner's settings (notice, AI on/off, limits, hidden templates).
+  const reloadSettings = useCallback(() => loadSiteSettings().then(setSettings), []);
+  useEffect(() => {
+    reloadSettings();
+  }, [reloadSettings]);
+
+  // "#admin" in the address opens the Admin panel.
+  useEffect(() => {
+    const on = () => setRoute(window.location.hash);
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+
+  // Show the Admin link only to the owner (the server checks again on every admin action).
+  useEffect(() => {
+    if (!isGoogle) return setIsAdmin(false);
+    api("/api/admin/me")
+      .then((r) => setIsAdmin(!!r.admin))
+      .catch(() => setIsAdmin(false));
+  }, [isGoogle, user?.uid]);
+
+  // A template the owner hid is switched to the first visible one.
+  useEffect(() => {
+    const fix = (list, hidden, cur, set) => {
+      if (!hidden?.includes(cur)) return;
+      const next = list.find((t) => !hidden.includes(t.id));
+      if (next) set(next.id);
+    };
+    fix(COVER_TEMPLATES, settings.hiddenCover, coverTpl, setCoverTpl);
+    fix(INDEX_TEMPLATES, settings.hiddenIndex, indexTpl, setIndexTpl);
+  }, [settings, coverTpl, indexTpl]);
 
   // Template ranking: most downloaded first.
   useEffect(() => {
@@ -278,7 +316,10 @@ export default function App() {
   const CoverT = (COVER_TEMPLATES.find((t) => t.id === coverTpl) || COVER_TEMPLATES[0]).Component;
   const IndexT = (INDEX_TEMPLATES.find((t) => t.id === indexTpl) || INDEX_TEMPLATES[0]).Component;
   const kindStats = (tab === "cover" ? stats.cover : stats.index) || {};
-  const templates = [...(tab === "cover" ? COVER_TEMPLATES : INDEX_TEMPLATES)].sort((a, b) => (kindStats[b.id] || 0) - (kindStats[a.id] || 0));
+  const hiddenIds = (tab === "cover" ? settings.hiddenCover : settings.hiddenIndex) || [];
+  const allOfKind = tab === "cover" ? COVER_TEMPLATES : INDEX_TEMPLATES;
+  const visibleOfKind = allOfKind.filter((t) => !hiddenIds.includes(t.id));
+  const templates = [...(visibleOfKind.length ? visibleOfKind : allOfKind)].sort((a, b) => (kindStats[b.id] || 0) - (kindStats[a.id] || 0));
   const activeTpl = tab === "cover" ? coverTpl : indexTpl;
   const setTpl = tab === "cover" ? setCoverTpl : setIndexTpl;
   const page = tab === "cover" ? <CoverT d={cover} /> : <IndexT cover={cover} index={index} />;
@@ -289,8 +330,54 @@ export default function App() {
     notify("success", "Your personal details were cleared.");
   }
 
+  const toastAndDialog = (
+    <>
+      {toast && (
+        <div className={"toast " + toast.type} role="status" key={toast.id}>
+          {toast.text}
+        </div>
+      )}
+      {dialog && (
+        <div className="modal-back" onClick={() => (dialog.resolve(false), setDialog(null))}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <p>{dialog.text}</p>
+            <div className="modal-actions">
+              <button className="btn-outline" onClick={() => (dialog.resolve(false), setDialog(null))}>
+                Cancel
+              </button>
+              <button className="btn-danger" onClick={() => (dialog.resolve(true), setDialog(null))}>
+                Yes, continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  if (route === "#admin") {
+    return (
+      <>
+        <Suspense fallback={<p className="adm-empty"><span className="spinner dark" /> Loading admin…</p>}>
+          <AdminPanel
+            user={user}
+            isGoogle={isGoogle}
+            googleIn={googleIn}
+            googleOut={googleOut}
+            notify={notify}
+            confirm={confirm}
+            onExit={() => (window.location.hash = "")}
+            onSettingsSaved={reloadSettings}
+          />
+        </Suspense>
+        {toastAndDialog}
+      </>
+    );
+  }
+
   return (
     <div className="app">
+      {settings.notice && <div className="site-notice">📢 {settings.notice}</div>}
       <header className="topbar">
         <div className="brand">
           <img src="/gtec-logo.jpeg" alt="" />
@@ -339,7 +426,7 @@ export default function App() {
               set={setCover}
               notify={notify}
               onPickCollege={pickCollege}
-              imageProps={{ confirm, library, reloadLibrary: loadLibrary, trials, setTrials }}
+              imageProps={{ confirm, library, reloadLibrary: loadLibrary, trials, setTrials, settings }}
             >
               <DesignLibrary templateNames={Object.fromEntries(COVER_TEMPLATES.map((t) => [t.id, t.name]))} onApply={applyDesign} version={designsVersion} />
             </CoverEditor>
@@ -369,6 +456,11 @@ export default function App() {
             <button type="button" className="btn-link danger" onClick={clearMine}>
               Clear my personal details
             </button>
+            {isAdmin && (
+              <a className="btn-link admin-link" href="#admin">
+                ⚙️ Admin panel
+              </a>
+            )}
             <p className="credit">
               Developed by{" "}
               <a href="https://www.facebook.com/jibon.mistry.24400" target="_blank" rel="noopener noreferrer">
@@ -424,27 +516,7 @@ export default function App() {
         {(exportWhat === "index" || exportWhat === "both") && <IndexT cover={cover} index={index} />}
       </div>
 
-      {toast && (
-        <div className={"toast " + toast.type} role="status" key={toast.id}>
-          {toast.text}
-        </div>
-      )}
-
-      {dialog && (
-        <div className="modal-back" onClick={() => (dialog.resolve(false), setDialog(null))}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-            <p>{dialog.text}</p>
-            <div className="modal-actions">
-              <button className="btn-outline" onClick={() => (dialog.resolve(false), setDialog(null))}>
-                Cancel
-              </button>
-              <button className="btn-danger" onClick={() => (dialog.resolve(true), setDialog(null))}>
-                Yes, continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {toastAndDialog}
     </div>
   );
 }

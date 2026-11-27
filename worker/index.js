@@ -6,6 +6,7 @@
 
 import { Firestore } from "./firestore.js";
 import { verifyIdToken, sha256Hex, readServiceAccount, getAccessToken } from "./google.js";
+import { handleAdmin, readSettings } from "./admin.js";
 import { thinkPrompt, buildOwnPrompt, generateWithFallback, signTrial, verifyTrial, b64 } from "./ai.js";
 
 function json(data, status = 200, extra = {}) {
@@ -92,6 +93,15 @@ async function bust(key) {
 }
 
 // ---------- colleges ----------
+async function ensureDefaultCollege(db) {
+  await db.createIfMissing("colleges", DEFAULT_COLLEGE.id, {
+    name: DEFAULT_COLLEGE.name,
+    logoUrl: DEFAULT_COLLEGE.logoUrl,
+    source: "default",
+    status: "visible",
+    createdAt: new Date(),
+  });
+}
 async function listColleges(env, ctx) {
   const db = new Firestore(env);
   const items = await cached("colleges-v1", 120, ctx, async () => {
@@ -280,7 +290,13 @@ async function aiGenerate(request, env) {
     if (subjectName.length < 2) throw userError("Write the subject name first, so the picture matches it.");
   }
   const db = new Firestore(env);
-  await rateLimit(db, user.uid, "ai", 9);
+  const settings = await readSettings(db);
+  if (settings.aiEnabled === false) {
+    const off = userError("AI pictures are turned off by the site owner right now. Please use a ready picture or your own image.", 503, "ai_off");
+    off.expose = true;
+    throw off;
+  }
+  await rateLimit(db, user.uid, "ai", settings.aiPerDay ?? 9);
   let idea = "";
   if (!own) {
     const t = await thinkPrompt(env, subjectName, Number(body.variant) || 0);
@@ -381,13 +397,14 @@ async function makePdf(request, env, ctx) {
   if (html.length > MAX_HTML_BYTES) return json({ ok: false, code: "too_large", error: "The page is too large. Please use smaller images." }, 413);
 
   const user = await getUser(request, env);
-  if (user) {
-    try {
-      await rateLimit(new Firestore(env), user.uid, "pdf", 40);
-    } catch (e) {
-      if (e.code === "limit") return errorResponse(e);
-      // database problems must not block the PDF
-    }
+  // Fair-use limit: per visitor, or per internet address when there is no visitor sign-in.
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  const limiter = user ? { id: user.uid, max: 40 } : { id: "ip-" + (await sha256Hex("ip|" + ip)).slice(0, 24), max: 20 };
+  try {
+    await rateLimit(new Firestore(env), limiter.id, "pdf", limiter.max);
+  } catch (e) {
+    if (e.code === "limit") return errorResponse(e);
+    // database problems must not block the PDF
   }
 
   try {
@@ -473,6 +490,16 @@ async function dbCheck(env) {
   return json({ ok: !!ok4, database: ok4 ? "connected" : "not connected", steps }, ok4 ? 200 : 500);
 }
 
+// ---------- public site settings (set by the owner in the Admin panel) ----------
+async function publicSettings(env, ctx) {
+  const db = new Firestore(env);
+  const s = await cached("settings-v1", 60, ctx, async () => {
+    const x = await readSettings(db).catch(() => ({}));
+    return { notice: x.notice || "", aiEnabled: x.aiEnabled !== false, aiPerDay: x.aiPerDay ?? 9, uploadMaxMB: x.uploadMaxMB || 3, hiddenCover: x.hiddenCover || [], hiddenIndex: x.hiddenIndex || [] };
+  });
+  return json({ ok: true, settings: s });
+}
+
 // ---------- router ----------
 export default {
   async fetch(request, env, ctx) {
@@ -506,6 +533,10 @@ export default {
       if (p === "/api/ai/generate" && m === "POST") return await aiGenerate(request, env);
       if (p === "/api/images/approve" && m === "POST") return await approveImage(request, env);
       if (p === "/api/images/share" && m === "POST") return await shareOwnImage(request, env);
+      if (p === "/api/settings" && m === "GET") return await publicSettings(env, ctx);
+      if (p.startsWith("/api/admin/") || p === "/api/admin") {
+        return await handleAdmin(request, env, ctx, { json, userError, bust, allowedImageUrl, clean, getUser, collegeKey, ensureDefaultCollege });
+      }
       if (p.startsWith("/api/")) return json({ ok: false, error: "Unknown API route: " + p }, 404);
     } catch (err) {
       return errorResponse(err);

@@ -48,11 +48,11 @@ export async function api(path, { method = "GET", body, auth: withAuth = true } 
 }
 
 // Uploads a logo (data URL from imageTools) to Cloudinary and returns its https URL.
-export async function uploadLogo(dataUrl) {
+export async function uploadLogo(dataUrl, folder = "college-logos") {
   const form = new FormData();
   form.append("file", dataUrl);
   form.append("upload_preset", CLOUDINARY_PRESET);
-  form.append("folder", "college-logos");
+  form.append("folder", folder);
   let res;
   try {
     res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: "POST", body: form });

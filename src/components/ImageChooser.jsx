@@ -25,7 +25,9 @@ function Thumb({ src, label, on, onClick }) {
   );
 }
 
-export default function ImageChooser({ d, up, notify, confirm, library, reloadLibrary, trials, setTrials }) {
+export default function ImageChooser({ d, up, notify, confirm, library, reloadLibrary, trials, setTrials, settings = {} }) {
+  const perDay = settings.aiPerDay ?? 9;
+  const aiOn = settings.aiEnabled !== false && perDay > 0;
   const [mode, setMode] = useState("auto"); // "auto" | "prompt"
   const [ownPrompt, setOwnPrompt] = useState("");
   const [busy, setBusy] = useState(null); // null | { n, of }
@@ -137,6 +139,9 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
 
       <div className="ai-box">
         <h4 className="img-h">✨ AI pictures</h4>
+        {!aiOn ? (
+          <p className="hint">AI pictures are turned off by the site owner right now. Please use a ready picture or your own image.</p>
+        ) : (<>
         <div className="seg" role="tablist">
           <button type="button" role="tab" aria-selected={mode === "auto"} className={mode === "auto" ? "on" : ""} onClick={() => setMode("auto")}>
             ✨ Generate with AI
@@ -147,11 +152,11 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
         </div>
         {mode === "auto" ? (
           <p className="hint">
-            AI first thinks what suits a "{d.subjectName.trim() || "your subject"}" lab report (e.g. students dyeing and testing colours), then draws {TRIALS_PER_ROUND} different landscape clip-art pictures on a white background. Trials are not saved. Up to 9 per day.
+            AI first thinks what suits a "{d.subjectName.trim() || "your subject"}" lab report (e.g. students dyeing and testing colours), then draws {TRIALS_PER_ROUND} different landscape clip-art pictures on a white background. Trials are not saved. Up to {perDay} per day.
           </p>
         ) : (
           <>
-            <p className="hint">Write anything you want. Your words are used as written. Up to 9 pictures per day.</p>
+            <p className="hint">Write anything you want. Your words are used as written. Up to {perDay} pictures per day.</p>
             <textarea
               rows={3}
               placeholder="e.g. cartoon dyeing machine with blue and red fabric, white background"
@@ -191,6 +196,7 @@ export default function ImageChooser({ d, up, notify, confirm, library, reloadLi
             </button>
           </>
         )}
+        </>)}
       </div>
 
       <div className="own-box">

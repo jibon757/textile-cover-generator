@@ -22,7 +22,7 @@
     "binding": "AI"
   },
   "vars": {
-    "APP_VERSION": "0.5.3",
+    "APP_VERSION": "0.6.0",
     "FIREBASE_PROJECT_ID": "textile-cover-generator",
     "CLOUDINARY_CLOUD_NAME": "hh9hmbra"
   }

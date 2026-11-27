@@ -122,6 +122,7 @@ export async function verifyIdToken(token, projectId, fetchImpl = fetch) {
       uid: payload.sub,
       provider: payload.firebase?.sign_in_provider || "unknown",
       email: payload.email || null,
+      emailVerified: payload.email_verified === true,
     };
   } catch {
     return null;
