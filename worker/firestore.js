@@ -41,7 +41,8 @@ export function docId(name) {
 export class Firestore {
   constructor(env, fetchImpl = fetch) {
     this.env = env;
-    this.fetch = fetchImpl;
+    // Wrapped so fetch is never called with the wrong `this` (Cloudflare throws "Illegal invocation").
+    this.fetch = (...args) => fetchImpl(...args);
     this.root = `projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
     this.base = "https://firestore.googleapis.com/v1/" + this.root;
   }
