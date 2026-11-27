@@ -6,6 +6,7 @@
 
 import { Firestore } from "./firestore.js";
 import { verifyIdToken, sha256Hex, readServiceAccount, getAccessToken } from "./google.js";
+import { buildPrompt, generateWithFallback, signTrial, verifyTrial, b64 } from "./ai.js";
 
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data), {
@@ -17,7 +18,7 @@ function errorResponse(err) {
   const msg = String(err?.message || err);
   if (msg.startsWith("QUOTA:")) return json({ ok: false, code: "quota", error: msg.slice(6).trim() }, 429);
   if (msg.startsWith("SETUP:")) return json({ ok: false, code: "setup", error: "Server setup problem: " + msg.slice(6).trim() }, 503);
-  if (err?.status && err.status < 500) return json({ ok: false, code: err.code || "bad_request", error: msg }, err.status);
+  if (err?.status && (err.status < 500 || err.expose)) return json({ ok: false, code: err.code || "bad_request", error: msg }, err.status);
   console.error("API error:", err?.stack || msg);
   return json({ ok: false, code: "server", error: "Something went wrong on the server. Please try again.", detail: msg.slice(0, 300) }, 500);
 }
@@ -163,15 +164,12 @@ export function sanitizeDesign(d, env) {
   };
   return design;
 }
-function canonical(obj) {
-  return JSON.stringify(Object.keys(obj).sort().reduce((o, k) => ((o[k] = typeof obj[k] === "string" ? obj[k].toLowerCase() : obj[k]), o), {}));
-}
 
 async function listDesigns(env, ctx) {
   const db = new Firestore(env);
   const items = await cached("designs-v1", 60, ctx, async () => {
     const rows = await db.query("savedDesigns", { orderBy: [["createdAt", "DESCENDING"]], limit: 300 });
-    return rows.filter((r) => r.status !== "hidden").map(({ createdBy, status, ...rest }) => rest);
+    return rows.filter((r) => r.status !== "hidden").map(({ createdBy, status, subjectKey, ...rest }) => rest);
   });
   return json({ ok: true, designs: items });
 }
@@ -183,15 +181,16 @@ async function saveDesign(request, env) {
   if (!design.subjectName) throw userError("Write the subject name first.");
   if (!design.coverTemplate) throw userError("Choose a cover template first.");
 
-  const id = (await sha256Hex(canonical(design))).slice(0, 40);
+  // One design per subject + picture. The same subject with a different picture is a new design.
+  const subjectId = collegeKey((design.subjectCode + " " + design.subjectName).trim()) || "unknown";
+  const id = (await sha256Hex("design-v2|" + subjectId + "|" + design.illustration)).slice(0, 40);
   const db = new Firestore(env);
   const existing = await db.get("savedDesigns/" + id);
   if (existing) return json({ ok: true, existed: true, id });
 
   await rateLimit(db, user.uid, "design", 30);
-  const created = await db.createIfMissing("savedDesigns", id, { ...design, createdBy: user.uid, createdAt: new Date(), status: "visible" });
+  const created = await db.createIfMissing("savedDesigns", id, { ...design, subjectKey: subjectId, createdBy: user.uid, createdAt: new Date(), status: "visible" });
   if (created) {
-    const subjectId = collegeKey((design.subjectCode + " " + design.subjectName).trim()) || "unknown";
     await db.increment("subjects/" + subjectId, { name: design.subjectName, code: design.subjectCode, department: design.department }, { designs: 1 });
   }
   await bust("designs-v1");
@@ -235,6 +234,102 @@ async function recordDownload(env, user, meta, html) {
   } catch {
     // Stats must never break a download.
   }
+}
+
+
+// ---------- pictures: AI trials, approved library, common images ----------
+// Pictures that ship with the website (owner adds more in the Admin panel later).
+const BUILTIN_COMMON = [
+  { id: "builtin-dyeing", url: "/img/sample-dyeing.jpg", title: "Dyeing lab", tags: "dyeing coloration wet process chemistry" },
+  { id: "builtin-beaker", url: "/img/icon-beaker.png", title: "Beaker", tags: "lab chemistry test" },
+  { id: "builtin-testtubes", url: "/img/icon-testtubes.png", title: "Test tubes", tags: "lab chemistry test" },
+  { id: "builtin-molecule", url: "/img/molecule.png", title: "Molecule", tags: "chemistry polymer fibre" },
+];
+
+async function listImages(env, ctx) {
+  const db = new Firestore(env);
+  const data = await cached("images-v1", 120, ctx, async () => {
+    const approved = await db.query("approvedImages", { orderBy: [["createdAt", "DESCENDING"]], limit: 300 }).catch(() => []);
+    const common = await db.list("commonImages", 300).catch(() => []);
+    return {
+      approved: approved
+        .filter((r) => r.status !== "hidden")
+        .map((r) => ({ id: r.id, url: r.url, subjectName: r.subjectName || "", subjectCode: r.subjectCode || "", subjectKey: r.subjectKey || "" })),
+      common: [
+        ...common.filter((r) => r.status !== "hidden" && r.url).map((r) => ({ id: r.id, url: r.url, title: r.title || "", tags: r.tags || "" })),
+        ...BUILTIN_COMMON,
+      ],
+    };
+  });
+  return json({ ok: true, ...data });
+}
+
+// Makes ONE trial picture. Nothing is stored: the picture goes back to the browser
+// with a signed token. The browser asks for one picture at a time (shows progress).
+async function aiGenerate(request, env) {
+  const user = await requireUser(request, env);
+  const body = await request.json().catch(() => ({}));
+  const subjectName = clean(body.subjectName, 150);
+  const subjectCode = clean(body.subjectCode, 40);
+  const idea = clean(body.idea, 200);
+  if (subjectName.length < 2) throw userError("Write the subject name first, so the picture matches it.");
+  const db = new Firestore(env);
+  await rateLimit(db, user.uid, "ai", 9);
+  const img = await generateWithFallback(env, db, buildPrompt(subjectName, idea));
+  const image = `data:${img.mime};base64,${b64(img.bytes)}`;
+  const h = await sha256Hex(image);
+  const token = await signTrial(env, {
+    h,
+    n: subjectName,
+    c: subjectCode,
+    k: collegeKey((subjectCode + " " + subjectName).trim()),
+    p: img.provider,
+    exp: Date.now() + 2 * 24 * 3600 * 1000,
+  });
+  return json({ ok: true, image, token, provider: img.provider });
+}
+
+// Called only after the cover PDF with this AI picture was downloaded successfully.
+// Saves the picture once (no duplicates) to Cloudinary + the approved library.
+async function approveImage(request, env) {
+  const user = await requireUser(request, env);
+  const body = await request.json().catch(() => ({}));
+  const image = typeof body.image === "string" ? body.image : "";
+  if (!/^data:image\/(jpeg|png|webp);base64,/.test(image) || image.length > 6_000_000) throw userError("This picture can't be saved.");
+  const trial = await verifyTrial(env, body.token);
+  if (!trial) throw userError("This AI picture has expired. Please make a new one.", 400, "trial_expired");
+  const h = await sha256Hex(image);
+  if (h !== trial.h) throw userError("This picture was changed, so it can't be saved to the library.", 400, "trial_mismatch");
+
+  const id = h.slice(0, 40);
+  const db = new Firestore(env);
+  const existing = await db.get("approvedImages/" + id);
+  if (existing?.url) return json({ ok: true, existed: true, url: existing.url, id });
+
+  await rateLimit(db, user.uid, "approve", 20);
+  const form = new FormData();
+  form.append("file", image);
+  form.append("upload_preset", env.CLOUDINARY_UPLOAD_PRESET || "coverpc");
+  form.append("folder", "approved-ai");
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${env.CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: form });
+  const up = await res.json().catch(() => ({}));
+  const url = allowedImageUrl(up.secure_url, env);
+  if (!res.ok || !url) throw new Error("Cloudinary upload failed: " + (up.error?.message || "HTTP " + res.status));
+
+  await db.createIfMissing("approvedImages", id, {
+    url,
+    subjectName: trial.n,
+    subjectCode: trial.c || "",
+    subjectKey: trial.k || "",
+    provider: trial.p || "",
+    source: "ai",
+    status: "visible",
+    createdBy: user.uid,
+    createdAt: new Date(),
+  });
+  await bust("images-v1");
+  const saved = await db.get("approvedImages/" + id);
+  return json({ ok: true, existed: false, url: saved?.url || url, id });
 }
 
 // ---------- PDF ----------
@@ -362,6 +457,7 @@ export default {
           cloudinaryCloud: env.CLOUDINARY_CLOUD_NAME,
           pdfService: !!(env.BROWSER && typeof env.BROWSER.quickAction === "function"),
           databaseKey: !!env.FIREBASE_SERVICE_ACCOUNT,
+          aiService: !!env.AI,
         });
       }
       if (p === "/api/health/db") return await dbCheck(env);
@@ -372,6 +468,9 @@ export default {
       if (p === "/api/designs" && m === "POST") return await saveDesign(request, env);
       if (p === "/api/stats" && m === "GET") return await getStats(env, ctx);
       if (p === "/api/my/doc") return await myDoc(request, env);
+      if (p === "/api/images" && m === "GET") return await listImages(env, ctx);
+      if (p === "/api/ai/generate" && m === "POST") return await aiGenerate(request, env);
+      if (p === "/api/images/approve" && m === "POST") return await approveImage(request, env);
       if (p.startsWith("/api/")) return json({ ok: false, error: "Unknown API route: " + p }, 404);
     } catch (err) {
       return errorResponse(err);

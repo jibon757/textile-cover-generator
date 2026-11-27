@@ -20,8 +20,7 @@ export const DEPARTMENTS = [
 export const LEVELS = ["1", "2", "3", "4"];
 export const TERMS = ["I", "II"];
 
-// Temporary placeholder illustration (from your reference cover) until the
-// image library + AI arrive in Phase 5.
+// Default picture (one of the built-in common pictures).
 export const SAMPLE_ILLUSTRATION = "/img/sample-dyeing.jpg";
 
 export function emptyCover() {
@@ -39,6 +38,7 @@ export function emptyCover() {
     teacher: { name: "", designation: "", department: "", college: "" },
     submissionDate: "",
     illustration: SAMPLE_ILLUSTRATION,
+    illustrationTrial: null, // signed token when the picture is an AI trial (approved on download)
     feather: 35, // 0 = sharp edges, 100 = very soft
     featherShape: "oval", // "oval" | "soft-rect"
     blend: true, // white parts of the image melt into the white page

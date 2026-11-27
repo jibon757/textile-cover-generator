@@ -1,8 +1,9 @@
 // The forms on the left side. Every change updates the preview instantly.
 import { useRef } from "react";
-import { DEPARTMENTS, LEVELS, TERMS, DEFAULT_COLLEGE, SAMPLE_ILLUSTRATION, MAX_INDEX_ROWS, newId } from "../data.js";
+import { DEPARTMENTS, LEVELS, TERMS, DEFAULT_COLLEGE, MAX_INDEX_ROWS, newId } from "../data.js";
 import { readImageFile } from "../imageTools.js";
 import CollegePicker from "./CollegePicker.jsx";
+import ImageChooser from "./ImageChooser.jsx";
 
 function Field({ label, optional, children }) {
   return (
@@ -54,7 +55,7 @@ function ImagePicker({ label, onPick, notify, maxSide }) {
   );
 }
 
-export function CoverEditor({ d, set, notify, onPickCollege, children }) {
+export function CoverEditor({ d, set, notify, onPickCollege, imageProps, children }) {
   const up = (patch) => set({ ...d, ...patch });
   const upS = (patch) => set({ ...d, student: { ...d.student, ...patch } });
   const upT = (patch) => set({ ...d, teacher: { ...d.teacher, ...patch } });
@@ -175,18 +176,7 @@ export function CoverEditor({ d, set, notify, onPickCollege, children }) {
       </Section>
 
       <Section title="Illustration" icon="🖼️">
-        <div className="logo-row">
-          <div className="illus-thumb">{d.illustration ? <img src={d.illustration} alt="Illustration" /> : <span>No image</span>}</div>
-          <div className="btn-col">
-            <ImagePicker label="Use my own image" onPick={(illustration) => up({ illustration })} notify={notify} maxSide={1600} />
-            <button type="button" className="btn-link" onClick={() => up({ illustration: SAMPLE_ILLUSTRATION })}>
-              Use sample image
-            </button>
-            <button type="button" className="btn-link danger" onClick={() => up({ illustration: "" })}>
-              Remove image
-            </button>
-          </div>
-        </div>
+        <ImageChooser d={d} up={up} notify={notify} {...imageProps} />
         <Field label={`Soft edges (feather): ${d.feather}`}>
           <input type="range" min={0} max={100} value={d.feather} onChange={(e) => up({ feather: Number(e.target.value) })} />
         </Field>
@@ -202,7 +192,6 @@ export function CoverEditor({ d, set, notify, onPickCollege, children }) {
             Melt white background into page
           </label>
         </div>
-        <p className="hint">Subject image library and AI images arrive in Phase 5. The sample image is a temporary placeholder.</p>
       </Section>
     </div>
   );

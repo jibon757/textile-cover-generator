@@ -7,7 +7,7 @@ import { CoverEditor, IndexEditor } from "./components/Editors.jsx";
 import ScaledPage from "./components/ScaledPage.jsx";
 import { auth, signInAnonymously, onAuthStateChanged, signOut, signInWithGoogle, googleErrorMessage } from "./firebase.js";
 import { api } from "./api.js";
-import DesignLibrary from "./components/DesignLibrary.jsx";
+import DesignLibrary, { designFromCover } from "./components/DesignLibrary.jsx";
 import { downloadPdf, pdfFileName } from "./pdf.js";
 
 const DRAFT_KEY = "tcg.draft.v1";
@@ -46,6 +46,9 @@ export default function App() {
   const [cloudReady, setCloudReady] = useState(false); // true after the Google copy was loaded
   const [cloudState, setCloudState] = useState(""); // "" | "saving" | "saved" | "error"
   const [stats, setStats] = useState({ cover: {}, index: {} });
+  const [library, setLibrary] = useState(null); // { approved, common } pictures
+  const [trials, setTrials] = useState([]); // AI trial pictures (only in this browser tab, never saved)
+  const [designsVersion, setDesignsVersion] = useState(0);
   const isGoogle = !!user && !user.isAnonymous;
 
   const notify = useCallback((type, text) => {
@@ -74,6 +77,45 @@ export default function App() {
       .then((r) => setStats(r.stats))
       .catch(() => {});
   }, []);
+
+  // Picture library (approved AI pictures + common pictures).
+  const loadLibrary = useCallback(async () => {
+    try {
+      const r = await api("/api/images", { auth: false });
+      setLibrary({ approved: r.approved || [], common: r.common || [] });
+    } catch (err) {
+      setLibrary({ approved: [], common: [], error: "Pictures could not be loaded: " + err.message });
+    }
+  }, []);
+  useEffect(() => {
+    loadLibrary();
+  }, [loadLibrary]);
+
+  // After a successful cover download: approve the AI picture (if one is used) and
+  // save the design for everyone (no personal details). Never blocks the download.
+  async function afterCoverDownload(c) {
+    let used = c;
+    if (c.illustrationTrial && c.illustration?.startsWith("data:")) {
+      try {
+        const r = await api("/api/images/approve", { method: "POST", body: { image: c.illustration, token: c.illustrationTrial } });
+        used = { ...c, illustration: r.url, illustrationTrial: null };
+        const trialImage = c.illustration;
+        setCover((cv) => (cv.illustration === trialImage ? { ...cv, illustration: r.url, illustrationTrial: null } : cv));
+        setTrials((t) => t.filter((x) => x.image !== trialImage));
+        loadLibrary();
+      } catch (err) {
+        if (err.code === "trial_expired" || err.code === "trial_mismatch") setCover((cv) => ({ ...cv, illustrationTrial: null }));
+        used = { ...c, illustration: "" }; // the trial picture itself is never shared
+      }
+    }
+    if (!used.subjectName.trim()) return;
+    try {
+      const r = await api("/api/designs", { method: "POST", body: { design: designFromCover(used, coverTpl, indexTpl) } });
+      if (!r.existed) setDesignsVersion((v) => v + 1);
+    } catch {
+      /* saving the shared design is a bonus; the download already worked */
+    }
+  }
 
   // When signed in with Google: load the copy saved in the cloud once.
   useEffect(() => {
@@ -122,7 +164,7 @@ export default function App() {
       if (JSON.stringify(doc).length > 850_000) {
         // Very large device pictures stay on this device only.
         const strip = (u) => (u && u.startsWith("data:") ? "" : u);
-        doc = { ...doc, cover: { ...cover, logo: strip(cover.logo), illustration: strip(cover.illustration) } };
+        doc = { ...doc, cover: { ...cover, logo: strip(cover.logo), illustration: strip(cover.illustration), illustrationTrial: null } };
       }
       try {
         await api("/api/my/doc", { method: "PUT", body: { doc } });
@@ -172,6 +214,7 @@ export default function App() {
       collegeName: d.collegeName || cv.collegeName,
       logo: d.logoUrl || cv.logo,
       illustration: d.illustration || cv.illustration,
+      illustrationTrial: d.illustration ? null : cv.illustrationTrial,
       feather: typeof d.feather === "number" ? d.feather : cv.feather,
       featherShape: d.featherShape || cv.featherShape,
       blend: d.blend !== false,
@@ -208,6 +251,7 @@ export default function App() {
         if (cancelled) return;
         await downloadPdf(exportRef.current, pdfFileName(cover, exportWhat), { what: exportWhat, coverTemplate: coverTpl, indexTemplate: indexTpl });
         notify("success", "PDF downloaded.");
+        if (exportWhat === "cover" || exportWhat === "both") afterCoverDownload(cover);
       } catch (err) {
         notify("error", err.message);
       } finally {
@@ -279,16 +323,14 @@ export default function App() {
       <main className={"workspace show-" + mobileView}>
         <div className="left">
           {tab === "cover" ? (
-            <CoverEditor d={cover} set={setCover} notify={notify} onPickCollege={pickCollege}>
-              <DesignLibrary
-                cover={cover}
-                coverTpl={coverTpl}
-                indexTpl={indexTpl}
-                templateNames={Object.fromEntries(COVER_TEMPLATES.map((t) => [t.id, t.name]))}
-                onApply={applyDesign}
-                notify={notify}
-                confirm={confirm}
-              />
+            <CoverEditor
+              d={cover}
+              set={setCover}
+              notify={notify}
+              onPickCollege={pickCollege}
+              imageProps={{ confirm, library, reloadLibrary: loadLibrary, trials, setTrials }}
+            >
+              <DesignLibrary templateNames={Object.fromEntries(COVER_TEMPLATES.map((t) => [t.id, t.name]))} onApply={applyDesign} version={designsVersion} />
             </CoverEditor>
           ) : (
             <IndexEditor index={index} set={setIndex} notify={notify} confirm={confirm} />

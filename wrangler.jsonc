@@ -17,8 +17,12 @@
   "browser": {
     "binding": "BROWSER"
   },
+  // Cloudflare Workers AI: makes the subject pictures (free: 10,000 neurons/day).
+  "ai": {
+    "binding": "AI"
+  },
   "vars": {
-    "APP_VERSION": "0.4.2",
+    "APP_VERSION": "0.5.0",
     "FIREBASE_PROJECT_ID": "textile-cover-generator",
     "CLOUDINARY_CLOUD_NAME": "hh9hmbra"
   }

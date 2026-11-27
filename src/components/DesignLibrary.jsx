@@ -24,11 +24,10 @@ export function designFromCover(cover, coverTpl, indexTpl) {
   };
 }
 
-export default function DesignLibrary({ cover, coverTpl, indexTpl, templateNames, onApply, notify, confirm }) {
+export default function DesignLibrary({ templateNames, onApply, version }) {
   const [designs, setDesigns] = useState(null);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
-  const [saving, setSaving] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
   async function load() {
@@ -43,33 +42,13 @@ export default function DesignLibrary({ cover, coverTpl, indexTpl, templateNames
   }
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
     const all = (designs || []).filter((d) => !s || `${d.subjectName} ${d.subjectCode} ${d.collegeName}`.toLowerCase().includes(s));
     return showAll ? all : all.slice(0, 6);
   }, [designs, q, showAll]);
-
-  async function save() {
-    if (!cover.subjectName.trim()) return notify("error", "Write the subject name first.");
-    const usesOwnImage = cover.illustration?.startsWith("data:") || cover.logo?.startsWith("data:");
-    const ok = await confirm(
-      "Share this design with everyone? Only the subject, code, college, template and picture settings are shared — never your name, ID, contact or teacher details." +
-        (usesOwnImage ? " Pictures uploaded from your device are not shared." : "")
-    );
-    if (!ok) return;
-    setSaving(true);
-    try {
-      const res = await api("/api/designs", { method: "POST", body: { design: designFromCover(cover, coverTpl, indexTpl) } });
-      notify("success", res.existed ? "This exact design is already saved." : "Design saved for everyone. Thank you!");
-      load();
-    } catch (err) {
-      notify("error", err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <section className="form-card">
@@ -87,10 +66,11 @@ export default function DesignLibrary({ cover, coverTpl, indexTpl, templateNames
           </button>
         </p>
       )}
-      {designs && !error && list.length === 0 && <p className="hint">{q ? "No design found for this search." : "No designs saved yet. Be the first!"}</p>}
+      {designs && !error && list.length === 0 && <p className="hint">{q ? "No design found for this search." : "No designs yet. Download a cover and yours appears here."}</p>}
       <ul className="design-list">
         {list.map((d) => (
           <li key={d.id}>
+            <span className="design-pic">{d.illustration ? <img src={d.illustration} alt="" loading="lazy" /> : null}</span>
             <div>
               <strong>{d.subjectCode ? d.subjectCode + " · " : ""}{d.subjectName}</strong>
               <span>
@@ -109,9 +89,7 @@ export default function DesignLibrary({ cover, coverTpl, indexTpl, templateNames
           {showAll ? "Show less" : `Show all (${designs.length})`}
         </button>
       )}
-      <button type="button" className="btn-outline full" onClick={save} disabled={saving}>
-        {saving ? <span className="spinner dark" /> : "💾"} Save my design for everyone
-      </button>
+      <p className="hint">Designs are saved automatically when a cover is downloaded (one per subject and picture, without anyone's personal details).</p>
     </section>
   );
 }
