@@ -5,7 +5,7 @@
 // stored as the Cloudflare secret FIREBASE_SERVICE_ACCOUNT. Browsers can't write to it directly.
 
 import { Firestore } from "./firestore.js";
-import { verifyIdToken, sha256Hex } from "./google.js";
+import { verifyIdToken, sha256Hex, readServiceAccount, getAccessToken } from "./google.js";
 
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data), {
@@ -18,7 +18,8 @@ function errorResponse(err) {
   if (msg.startsWith("QUOTA:")) return json({ ok: false, code: "quota", error: msg.slice(6).trim() }, 429);
   if (msg.startsWith("SETUP:")) return json({ ok: false, code: "setup", error: "Server setup problem: " + msg.slice(6).trim() }, 503);
   if (err?.status && err.status < 500) return json({ ok: false, code: err.code || "bad_request", error: msg }, err.status);
-  return json({ ok: false, code: "server", error: "Something went wrong on the server. Please try again." }, 500);
+  console.error("API error:", err?.stack || msg);
+  return json({ ok: false, code: "server", error: "Something went wrong on the server. Please try again.", detail: msg.slice(0, 300) }, 500);
 }
 function userError(message, status = 400, code = "bad_request") {
   const e = new Error(message);
@@ -313,6 +314,36 @@ async function myDoc(request, env) {
   return json({ ok: false, error: "Method not allowed." }, 405);
 }
 
+// ---------- step-by-step database check (shows where setup is broken; never shows secrets) ----------
+async function dbCheck(env) {
+  const steps = [];
+  const step = async (name, fn) => {
+    try {
+      const info = await fn();
+      steps.push({ step: name, ok: true, ...(info || {}) });
+      return true;
+    } catch (e) {
+      steps.push({ step: name, ok: false, error: String(e?.message || e).replace(/^SETUP:\s*/, "").slice(0, 400) });
+      return false;
+    }
+  };
+  let sa;
+  const ok1 = await step("1. Read secret FIREBASE_SERVICE_ACCOUNT", async () => {
+    sa = readServiceAccount(env);
+    return { project_id: sa.project_id || "(missing)", client_email: sa.client_email };
+  });
+  const ok2 = ok1 && (await step("2. Project matches", async () => {
+    if (sa.project_id && sa.project_id !== env.FIREBASE_PROJECT_ID) throw new Error(`The key is for project "${sa.project_id}", but the site uses "${env.FIREBASE_PROJECT_ID}".`);
+  }));
+  const ok3 = ok2 && (await step("3. Google accepts the key", async () => {
+    await getAccessToken(env);
+  }));
+  const ok4 = ok3 && (await step("4. Firestore database reachable", async () => {
+    await new Firestore(env).list("colleges", 1);
+  }));
+  return json({ ok: !!ok4, database: ok4 ? "connected" : "not connected", steps }, ok4 ? 200 : 500);
+}
+
 // ---------- router ----------
 export default {
   async fetch(request, env, ctx) {
@@ -333,11 +364,7 @@ export default {
           databaseKey: !!env.FIREBASE_SERVICE_ACCOUNT,
         });
       }
-      if (p === "/api/health/db") {
-        const db = new Firestore(env);
-        await db.list("colleges", 1);
-        return json({ ok: true, database: "connected" });
-      }
+      if (p === "/api/health/db") return await dbCheck(env);
       if (p === "/api/pdf") return await makePdf(request, env, ctx);
       if (p === "/api/colleges" && m === "GET") return await listColleges(env, ctx);
       if (p === "/api/colleges" && m === "POST") return await addCollege(request, env);

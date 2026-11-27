@@ -65,7 +65,7 @@ export class Firestore {
     }
     if (r.status === 404 && /database/i.test(msg)) throw new Error("SETUP: Firestore database not found. Create it in the Firebase console.");
     if (r.status === 403) throw new Error("SETUP: The service account has no permission for Firestore (" + msg + ").");
-    throw new Error(what + " failed: " + msg);
+    throw new Error("SETUP: Database " + what.toLowerCase() + " failed (HTTP " + r.status + "): " + msg);
   }
 
   // Returns plain object with `id`, or null if it doesn't exist.

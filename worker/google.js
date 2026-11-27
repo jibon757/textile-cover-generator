@@ -60,13 +60,18 @@ export async function getAccessToken(env, fetchImpl = fetch) {
     exp: now + 3600,
   };
   const unsigned = b64urlJson(header) + "." + b64urlJson(claims);
-  const key = await crypto.subtle.importKey(
-    "pkcs8",
-    pemToDer(sa.private_key.replace(/\\n/g, "\n")),
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
+  let key;
+  try {
+    key = await crypto.subtle.importKey(
+      "pkcs8",
+      pemToDer(sa.private_key.replace(/\\n/g, "\n")),
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+  } catch (e) {
+    throw new Error("SETUP: The private_key inside FIREBASE_SERVICE_ACCOUNT could not be read (" + (e?.message || e) + "). Paste the whole JSON file again.");
+  }
   const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, enc.encode(unsigned));
   const jwt = unsigned + "." + b64url(sig);
 
