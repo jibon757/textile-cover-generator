@@ -15,7 +15,7 @@ export function featherMask(feather, shape) {
   return `radial-gradient(ellipse 50% 50% at 50% 50%, #000 ${solid}%, transparent 100%)`;
 }
 
-export default function Illustration({ src, feather = 35, shape = "oval", blend = true, style = {}, className = "" }) {
+export default function Illustration({ src, feather = 0, shape = "oval", blend = true, style = {}, className = "" }) {
   if (!src) return null;
   const mask = featherMask(feather, shape);
   const composite = shape === "soft-rect" && feather ? "intersect" : undefined;

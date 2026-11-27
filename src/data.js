@@ -18,7 +18,14 @@ export const DEPARTMENTS = [
 ];
 
 export const LEVELS = ["1", "2", "3", "4"];
-export const TERMS = ["I", "II"];
+export const TERMS = ["1", "2"];
+
+// Old drafts and saved designs used Roman numerals; show them as numbers.
+const ROMAN = { I: "1", II: "2", III: "3", IV: "4" };
+export function toNumber(v) {
+  const t = String(v || "").trim();
+  return ROMAN[t.toUpperCase()] || t;
+}
 
 // Default picture (one of the built-in common pictures).
 export const SAMPLE_ILLUSTRATION = "/img/sample-dyeing.jpg";
@@ -39,7 +46,7 @@ export function emptyCover() {
     submissionDate: "",
     illustration: SAMPLE_ILLUSTRATION,
     illustrationTrial: null, // signed token when the picture is an AI trial (approved on download)
-    feather: 35, // 0 = sharp edges, 100 = very soft
+    feather: 0, // 0 = sharp edges (default), 100 = very soft
     featherShape: "oval", // "oval" | "soft-rect"
     blend: true, // white parts of the image melt into the white page
   };

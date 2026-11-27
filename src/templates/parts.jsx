@@ -1,6 +1,6 @@
 // Small building blocks shared by all templates.
 import Fit from "../components/Fit.jsx";
-import { formatDate } from "../data.js";
+import { formatDate, toNumber } from "../data.js";
 
 // Rows for "Submitted By". Required rows always print (with a blank line when empty,
 // so a student can still hand-write). Optional rows print only when filled.
@@ -12,8 +12,8 @@ export function studentRows(d) {
     ["Student ID / Roll", s.id, true],
     ["Registration No.", s.reg, false],
     ["Session", s.session, true],
-    ["Level", d.level, true],
-    ["Term", d.term, true],
+    ["Level", toNumber(d.level), true],
+    ["Term", toNumber(d.term), true],
     ["Contact", s.contact, true],
   ].filter(([, v, req]) => req || (v && v.trim()));
 }

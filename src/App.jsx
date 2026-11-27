@@ -1,6 +1,6 @@
 // Cover + Index generator with live A4 preview, shared colleges/designs and optional Google cloud save.
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
-import { emptyCover, emptyIndex } from "./data.js";
+import { emptyCover, emptyIndex, toNumber } from "./data.js";
 import { COVER_TEMPLATES } from "./templates/covers.jsx";
 import { INDEX_TEMPLATES } from "./templates/indexes.jsx";
 import { CoverEditor, IndexEditor } from "./components/Editors.jsx";
@@ -22,7 +22,14 @@ function loadDraft() {
     const d = JSON.parse(raw);
     const base = emptyCover();
     return {
-      cover: { ...base, ...d.cover, student: { ...base.student, ...d.cover?.student }, teacher: { ...base.teacher, ...d.cover?.teacher } },
+      cover: {
+        ...base,
+        ...d.cover,
+        level: toNumber(d.cover?.level),
+        term: toNumber(d.cover?.term),
+        student: { ...base.student, ...d.cover?.student },
+        teacher: { ...base.teacher, ...d.cover?.teacher },
+      },
       index: d.index?.rows?.length ? d.index : emptyIndex(),
       coverTpl: d.coverTpl || COVER_TEMPLATES[0].id,
       indexTpl: d.indexTpl || INDEX_TEMPLATES[0].id,
@@ -183,7 +190,7 @@ export default function App() {
           const same = JSON.stringify(doc.cover.student) === JSON.stringify(cover.student);
           if (!localHasData || same || (await confirm("Load the details saved in your Google account? (This replaces what is on this device now.)"))) {
             const base = emptyCover();
-            setCover({ ...base, ...doc.cover, student: { ...base.student, ...doc.cover.student }, teacher: { ...base.teacher, ...doc.cover.teacher } });
+            setCover({ ...base, ...doc.cover, level: toNumber(doc.cover.level), term: toNumber(doc.cover.term), student: { ...base.student, ...doc.cover.student }, teacher: { ...base.teacher, ...doc.cover.teacher } });
             if (doc.index?.rows?.length) setIndex(doc.index);
             if (doc.coverTpl) setCoverTpl(doc.coverTpl);
             if (doc.indexTpl) setIndexTpl(doc.indexTpl);
@@ -257,8 +264,8 @@ export default function App() {
       subjectCode: d.subjectCode || "",
       reportType: d.reportType || cv.reportType,
       department: d.department || cv.department,
-      level: d.level || cv.level,
-      term: d.term || cv.term,
+      level: toNumber(d.level) || cv.level,
+      term: toNumber(d.term) || cv.term,
       collegeId: d.collegeId || cv.collegeId,
       collegeName: d.collegeName || cv.collegeName,
       logo: d.logoUrl || cv.logo,
